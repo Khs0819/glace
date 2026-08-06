@@ -1,8 +1,9 @@
-# Stage 1: Build PHP dependencies
-FROM php:8.2-fpm-alpine AS builder
+FROM php:8.2-fpm-alpine
 
-# Install system dependencies (تم إضافة icu-dev هنا)
+# تثبيت متطلبات النظام وامتدادات PHP المطلوبة لـ Laravel و Filament دفعة واحدة
 RUN apk add --no-cache \
+    nginx \
+    supervisor \
     zip \
     libzip-dev \
     libpng-dev \
@@ -10,42 +11,31 @@ RUN apk add --no-cache \
     freetype-dev \
     git \
     oniguruma-dev \
-    icu-dev
+    icu-dev \
+    icu-libs
 
-# Install PHP extensions (تم إضافة intl هنا)
+# تثبيت وتفعيل إضافات PHP بالكامل
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install pdo_mysql mbstring zip gd pcntl bcmath intl
 
-# Install Composer
+# تثبيت أحدث إصدار من Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 COPY . .
 
-# Install Laravel dependencies
+# تثبيت حزم الملحقات الخاصة بـ Laravel
 RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
 
-# Stage 2: Production environment
-FROM php:8.2-fpm-alpine
-
-RUN apk add --no-cache nginx supervisor icu-libs
-
-# تفعيل الإضافات في مرحلة التشغيل النهائية أيضاً
-RUN docker-php-ext-install pdo_mysql bcmath intl
-
-WORKDIR /var/www/html
-
-# Copy application from builder
-COPY --from=builder /var/www/html /var/www/html
-
-# Copy Nginx & Supervisor configuration files
+# نسخ ملفات إعدادات الخادم والتشغيل
 COPY ./docker/nginx.conf /etc/nginx/nginx.conf
 COPY ./docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Set permissions for Laravel
+# ضبط صلاحيات المجلدات لتفادي مشاكل الرفع والقراءة
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
 EXPOSE 80
 
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+
 
