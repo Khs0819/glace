@@ -13,7 +13,7 @@ class HomeSeeder extends Seeder
     public function run(): void
     {
         // Hero Slides
-        HeroSlide::truncate();
+        // HeroSlide::truncate();
         HeroSlide::insert([
             [
                 'man_img'         => 'https://cdn.example.com/home/hero/man-1.png',

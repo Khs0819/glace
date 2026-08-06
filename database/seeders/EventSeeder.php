@@ -10,8 +10,8 @@ class EventSeeder extends Seeder
 {
     public function run(): void
     {
-        Event::truncate();
-        EventImage::truncate();
+        // Event::truncate();
+        // EventImage::truncate();
 
         $events = [
             [
