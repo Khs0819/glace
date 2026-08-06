@@ -1,0 +1,1429 @@
+openapi: 3.0.3
+info:
+  title: Glace API
+  description: |
+    API specification for the Glace application.
+    Endpoints will be added as they are defined.
+  version: 1.0.0
+  contact:
+    name: Glace Team
+
+servers:
+  - url: http://localhost:3000/api
+    description: Next.js local mock (Swagger Try it out)
+  - url: http://localhost:8000/api
+    description: Backend API (local)
+  - url: https://api.example.com/api
+    description: Production (update when ready)
+
+tags:
+  - name: Home
+    description: Home page content
+  - name: Menu
+    description: Menu categories and items
+  - name: Events
+    description: Events and promotions
+  - name: Contact
+    description: Contact and support forms
+
+paths:
+  /home:
+    get:
+      tags: [Home]
+      summary: Get home page content
+      description: |
+        Public aggregate endpoint for the entire home page.
+        Returns hero slides, about, why-glace, branches, and events
+        in a single response so the frontend can load the page with one request.
+      operationId: getHomePage
+      security: []
+      responses:
+        "200":
+          description: Home page content (`IHomePageData`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IHomePageData"
+              example:
+                hero:
+                  slides:
+                    - manImg: https://cdn.example.com/home/hero/man-1.png
+                      pieceImg: https://cdn.example.com/home/hero/piece-1.png
+                      zigzagsImg: https://cdn.example.com/home/hero/zigzags.png
+                      titleH1: جلاسية الأمير
+                      titleH2: لإنتاج الآيس كريم و البراد و العصائر و الحلويات
+                      bgColor: "#51C9F4"
+                      headerBgColor: "#51c9f4"
+                      h1BgColor: "#53352a"
+                      h2BgColor: "#51c9f4"
+                about:
+                  title: موهوبون في صناعة الأيسكريم !
+                  paragraphs:
+                    - تأسس جلاسيه الأمير عام 2015 كأحد أفرع شركة أسكمو الأمير...
+                    - تعمل الشركة على تقديم أجود أنواع الآيس كريم والبراد...
+                  image: https://cdn.example.com/home/about/character.png
+                  ctaLabel: اعرف أكثر
+                  ctaHref: /about
+                whyGlace:
+                  title: لماذا جلاسيه الأمير؟
+                  description: جلاسيه الأمير حاصلة على شهادة الجودة العالمية لسلامة الغذاء ISO 22000
+                  features:
+                    - label: جودة عالية
+                      image: https://cdn.example.com/home/why/feature-p.png
+                    - label: أمانة وثقة
+                      image: https://cdn.example.com/home/why/feature-b.png
+                  videoUrl: https://www.youtube.com/embed/ShMr0XzIqSM
+                  videoThumbnail: https://cdn.example.com/home/why/video-thumb.png
+                branches:
+                  title: ننتظركم في المواعيد التالية
+                  branches:
+                    - id: ramal
+                      label: فرع الرمال
+                      mapSrc: https://www.google.com/maps/embed?...
+                      address: غزة، الرمال، شارع الشهداء...
+                      phone: "0592 226 522"
+                      whatsapp: "0592 226 522"
+                      weekdayHours: "PM 11:45 – AM 10:00"
+                      fridayHours: "PM 11:45 – PM02:00"
+                      borderRadius: "32% 68% 69% 31% / 30% 28% 72% 70%"
+                events:
+                  title: الفعاليات و المناسبات
+                  moreLabel: عرض المزيد
+                  moreHref: /events
+                  items:
+                    - id: 1
+                      title: مشارك معرض الصناعات الغذائية الفلسطينية
+                      image: https://cdn.example.com/home/events/1.png
+                      href: /events/1
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /events:
+    get:
+      tags: [Events]
+      summary: List events
+      description: |
+        Public paginated list of events for `/events`.
+        Matches TypeScript `IEventsListResponse` / `IEvent`.
+      operationId: getEvents
+      security: []
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: perPage
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 8
+          example: 8
+      responses:
+        "200":
+          description: Paginated events list (`IEventsListResponse`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IEventsListResponse"
+              example:
+                items:
+                  - id: 2
+                    title: أجواء العيد مع جلاسيه غير
+                    date: "11/06/2020"
+                    description: كل عام وانتم بخير بحلول عيد الفطر المبارك...
+                    listImage: https://cdn.example.com/events/2-list.png
+                    images:
+                      - https://cdn.example.com/events/2-a.png
+                      - https://cdn.example.com/events/2-b.png
+                total: 10
+                page: 1
+                perPage: 8
+                totalPages: 2
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /events/{id}:
+    get:
+      tags: [Events]
+      summary: Get event by id
+      description: |
+        Public event detail for `/events/{id}`.
+        Matches TypeScript `IEvent`.
+      operationId: getEventById
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+          example: 2
+      responses:
+        "200":
+          description: Event detail (`IEvent`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IEvent"
+              example:
+                id: 2
+                title: أجواء العيد مع جلاسيه غير
+                date: "11/06/2020"
+                description: كل عام وانتم بخير بحلول عيد الفطر المبارك احتفالنا معكم بالعيد أجمل...
+                listImage: https://cdn.example.com/events/2-list.png
+                images:
+                  - https://cdn.example.com/events/2-a.png
+                  - https://cdn.example.com/events/2-b.png
+                  - https://cdn.example.com/events/2-c.png
+                  - https://cdn.example.com/events/2-d.png
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /contact:
+    post:
+      tags: [Contact]
+      summary: Send contact message
+      description: |
+        Public contact form submission.
+        Matches TypeScript `IContactRequest` → `IContactResponse`.
+      operationId: sendContactMessage
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IContactRequest"
+            example:
+              name: أحمد علي
+              phone: "0592123456"
+              email: ahmed@example.com
+              message: أريد الاستفسار عن العروض الحالية
+      responses:
+        "200":
+          description: Message accepted (`IContactResponse`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IContactResponse"
+              example:
+                success: true
+                message: تم إرسال رسالتك بنجاح
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /menu/categories:
+    get:
+      tags: [Menu]
+      summary: List menu categories
+      description: |
+        Public list of browse-grid category tabs for `/menu`.
+        Matches TypeScript `IMenuCategory`.
+      operationId: getMenuCategories
+      security: []
+      responses:
+        "200":
+          description: Menu categories (`IMenuCategory[]`)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IMenuCategory"
+              example:
+                - id: pancake
+                  label: بان كيك
+                  icon: cake
+                  accentColor: "#f4a851"
+                  gradientFrom: "#f4a851"
+                  gradientTo: "#c97d2a"
+                  sortOrder: 11
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /menu/products:
+    get:
+      tags: [Menu]
+      summary: List products
+      description: |
+        Public list of orderable/reference products, optionally filtered by
+        category. Matches TypeScript `IProduct` — a discriminated union on
+        `kind` (`builder` | `flat-list`).
+      operationId: getMenuProducts
+      security: []
+      parameters:
+        - name: category
+          in: query
+          required: false
+          description: Filter by `IMenuCategory.id`
+          schema:
+            type: string
+          example: pancake
+      responses:
+        "200":
+          description: Products (`IProduct[]`)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IProduct"
+              example:
+                - id: "a1c3e5f7-1111-4b22-9c33-aa44bb55cc66"
+                  slug: pancake
+                  categoryId: pancake
+                  kind: flat-list
+                  name: بان كيك
+                  description: بان كيك طازج بنكهات متنوعة
+                  image: https://cdn.example.com/menu/pancake.jpg
+                  sortOrder: 1
+                  available: true
+                  inStoreOnly: true
+                  hasFavorites: true
+                  hasNotes: true
+                  addons:
+                    - id: extra-nutella
+                      label: صوص نوتيلا إضافي
+                      price: 4
+                      available: true
+                    - id: extra-nuts
+                      label: بندق مبشور
+                      price: 4
+                      available: true
+                  items:
+                    - label: نوتيلا
+                      price: 11
+                      available: true
+                      description: بان كيك بصوص النوتيلا
+                    - label: لوتس
+                      price: 13
+                      available: true
+                    - label: بيستاشيو
+                      price: 17
+                      available: true
+                      isPremiumMixFlavor: true
+                  mixes:
+                    - id: mix
+                      label: مكس
+                      pick: 2
+                      basePrice: 14
+                      flavorPrice: 7
+                      premiumFlavorPrice: 11
+                      flavorOptionIds: [نوتيلا, لوتس, بيستاشيو]
+                - id: "b7f1c2a4-9e3d-4a10-8c21-3f5a2d1e9b04"
+                  slug: cup
+                  categoryId: ice-cream
+                  kind: builder
+                  name: بوظة كاسة
+                  image: https://cdn.example.com/menu/cup.jpg
+                  sortOrder: 1
+                  available: true
+                  selectionMode: repeatable
+                  flavorFamilies: [classic, special, mix]
+                  hasExtraBiscuitAddon: true
+                  containerOptions:
+                    - id: cup
+                      label: كاسة
+                      available: true
+                    - id: biscuit
+                      label: بسكوت
+                      available: true
+                      name: بوظة بسكوت
+                      image: https://cdn.example.com/menu/biscuit.jpg
+                  sizes:
+                    - id: cup-small
+                      label: صغير
+                      maxBalls: 1
+                      containerId: cup
+                      prices:
+                        - flavorFamily: classic
+                          price: 2
+                        - flavorFamily: special
+                          price: 4
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /menu/products/{slug}:
+    get:
+      tags: [Menu]
+      summary: Get product by slug
+      description: |
+        Public product detail for `/menu/order/{type}` — looked up by the
+        product's **`slug`** column (route-model-bind on `slug`, NOT the
+        primary key). In Laravel: `Route::get('products/{product:slug}', ...)`.
+        The response's `id` is still the internal PK to send back when
+        POSTing cart/order data. Matches TypeScript `IProduct`.
+      operationId: getMenuProductBySlug
+      security: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          description: Stable URL-safe identifier (`IProductBase.slug`)
+          schema:
+            type: string
+          example: cup
+      responses:
+        "200":
+          description: Product detail (`IProduct`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IProduct"
+              example:
+                id: "b7f1c2a4-9e3d-4a10-8c21-3f5a2d1e9b04"
+                slug: cup
+                categoryId: ice-cream
+                kind: builder
+                name: بوظة كاسة
+                image: https://cdn.example.com/menu/cup.jpg
+                sortOrder: 1
+                available: true
+                selectionMode: repeatable
+                flavorFamilies: [classic, special, mix]
+                hasExtraBiscuitAddon: true
+                containerOptions:
+                  - id: cup
+                    label: كاسة
+                    available: true
+                    pricingLabel: الكاسة
+                  - id: biscuit
+                    label: بسكوت
+                    available: true
+                    name: بوظة بسكوت
+                    image: https://cdn.example.com/menu/biscuit.jpg
+                    pricingLabel: البسكوت
+                sizes:
+                  - id: cup-small
+                    label: صغير
+                    maxBalls: 1
+                    containerId: cup
+                    prices:
+                      - flavorFamily: classic
+                        price: 2
+                      - flavorFamily: special
+                        price: 4
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /menu/addons:
+    get:
+      tags: [Menu]
+      summary: List additions catalog
+      description: |
+        Public shared additions (إضافات) catalog — the per-unit extras a
+        customer can attach to a cart line (e.g. sauces, nuts, biscuit), each
+        with its own price. Applied to any product in the cart's
+        "تخصيص الإضافات" flow. A product MAY override this shared list with its
+        own `IProductBase.addons`. Matches TypeScript `IAddonOption[]`.
+      operationId: getMenuAddons
+      security: []
+      responses:
+        "200":
+          description: Additions catalog (`IAddonOption[]`)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IAddonOption"
+              example:
+                - id: extra-biscuit
+                  label: بسكوت مخروط
+                  price: 3
+                  available: true
+                  type: counter
+                  maxQty: 10
+                - id: extra-caramel
+                  label: صوص كراميل
+                  price: 3
+                  available: true
+                  type: toggle
+                - id: extra-nuts
+                  label: بندق مبشور
+                  price: 4
+                  available: true
+                  type: toggle
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Token from login. Sent as:
+        `Authorization: <token>`
+        (matches the frontend `userApi` axios interceptor)
+
+  schemas:
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          example: Something went wrong
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          example:
+            email: ["The email field is required."]
+
+    # --- Auth ---
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        password:
+          type: string
+          format: password
+          example: secret123
+        rememberMe:
+          type: boolean
+          default: false
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        user:
+          $ref: '#/components/schemas/User'
+
+    RegisterRequest:
+      type: object
+      required: [fullName, email, phone, password, confirmPassword]
+      properties:
+        fullName:
+          type: string
+          example: Ahmed Ali
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          example: "+9665XXXXXXXX"
+        password:
+          type: string
+          format: password
+        confirmPassword:
+          type: string
+          format: password
+
+    RestorePasswordRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+
+    NewPasswordRequest:
+      type: object
+      required: [password, confirmPassword]
+      properties:
+        password:
+          type: string
+          format: password
+        confirmPassword:
+          type: string
+          format: password
+
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword, confirmPassword]
+      properties:
+        currentPassword:
+          type: string
+          format: password
+        newPassword:
+          type: string
+          format: password
+        confirmPassword:
+          type: string
+          format: password
+
+    # --- User ---
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        fullName:
+          type: string
+          example: Ahmed Ali
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          example: "+9665XXXXXXXX"
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        fullName:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+
+    # --- Contact (matches src/types/contact.types.ts) ---
+    IContactRequest:
+      type: object
+      description: Matches TypeScript `IContactRequest`
+      required:
+        - name
+        - phone
+        - email
+        - message
+      properties:
+        name:
+          type: string
+          example: أحمد علي
+        phone:
+          type: string
+          example: "0592123456"
+        email:
+          type: string
+          format: email
+          example: ahmed@example.com
+        subject:
+          type: string
+          description: Optional subject (not used by current UI)
+        message:
+          type: string
+          example: أريد الاستفسار عن العروض الحالية
+      example:
+        name: أحمد علي
+        phone: "0592123456"
+        email: ahmed@example.com
+        message: أريد الاستفسار عن العروض الحالية
+
+    IContactResponse:
+      type: object
+      description: Matches TypeScript `IContactResponse`
+      required:
+        - success
+        - message
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: تم إرسال رسالتك بنجاح
+      example:
+        success: true
+        message: تم إرسال رسالتك بنجاح
+
+    # Legacy alias (prefer IContactRequest)
+    ContactRequest:
+      allOf:
+        - $ref: "#/components/schemas/IContactRequest"
+
+    # --- Shared ---
+    SuccessMessage:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Operation completed successfully
+
+    # --- Home (matches src/types/home.types.ts) ---
+    IHomePageData:
+      type: object
+      description: Full payload for GET /home — matches TypeScript `IHomePageData`
+      required:
+        - hero
+        - about
+        - whyGlace
+        - branches
+        - events
+      properties:
+        hero:
+          $ref: "#/components/schemas/IHomeHero"
+        about:
+          $ref: "#/components/schemas/IHomeAboutData"
+        whyGlace:
+          $ref: "#/components/schemas/IHomeWhyGlaceData"
+        branches:
+          $ref: "#/components/schemas/IHomeBranchesData"
+        events:
+          $ref: "#/components/schemas/IHomeEventsData"
+      example:
+        hero:
+          slides:
+            - manImg: https://cdn.example.com/home/hero/man-1.png
+              pieceImg: https://cdn.example.com/home/hero/piece-1.png
+              zigzagsImg: https://cdn.example.com/home/hero/zigzags.png
+              titleH1: جلاسية الأمير
+              titleH2: لإنتاج الآيس كريم و البراد و العصائر و الحلويات
+              bgColor: "#51C9F4"
+              headerBgColor: "#51c9f4"
+              h1BgColor: "#53352a"
+              h2BgColor: "#51c9f4"
+        about:
+          title: موهوبون في صناعة الأيسكريم !
+          paragraphs:
+            - تأسس جلاسيه الأمير عام 2015...
+            - تعمل الشركة على تقديم أجود أنواع الآيس كريم...
+          image: https://cdn.example.com/home/about/character.png
+          ctaLabel: اعرف أكثر
+          ctaHref: /about
+        whyGlace:
+          title: لماذا جلاسيه الأمير؟
+          description: جلاسيه الأمير حاصلة على شهادة الجودة العالمية لسلامة الغذاء ISO 22000
+          features:
+            - label: جودة عالية
+              image: https://cdn.example.com/home/why/feature-p.png
+          videoUrl: https://www.youtube.com/embed/ShMr0XzIqSM
+          videoThumbnail: https://cdn.example.com/home/why/video-thumb.png
+        branches:
+          title: ننتظركم في المواعيد التالية
+          branches:
+            - id: ramal
+              label: فرع الرمال
+              mapSrc: https://www.google.com/maps/embed?...
+              address: غزة، الرمال...
+              phone: "0592 226 522"
+              whatsapp: "0592 226 522"
+              weekdayHours: "PM 11:45 – AM 10:00"
+              fridayHours: "PM 11:45 – PM02:00"
+              borderRadius: "32% 68% 69% 31% / 30% 28% 72% 70%"
+        events:
+          title: الفعاليات و المناسبات
+          moreLabel: عرض المزيد
+          moreHref: /events
+          items:
+            - id: 1
+              title: مشارك معرض الصناعات الغذائية الفلسطينية
+              image: https://cdn.example.com/home/events/1.png
+              href: /events/1
+
+    IHomeHero:
+      type: object
+      description: Hero block inside `IHomePageData.hero`
+      required:
+        - slides
+      properties:
+        slides:
+          type: array
+          items:
+            $ref: "#/components/schemas/ISlideData"
+
+    ISlideData:
+      type: object
+      description: Matches TypeScript `ISlideData`
+      required:
+        - manImg
+        - pieceImg
+        - zigzagsImg
+        - titleH1
+        - titleH2
+        - bgColor
+        - headerBgColor
+        - h1BgColor
+        - h2BgColor
+      properties:
+        manImg:
+          type: string
+          format: uri
+          description: Character / person image URL
+          example: https://cdn.example.com/home/hero/man-1.png
+        pieceImg:
+          type: string
+          format: uri
+          description: Ice cream piece decoration URL
+          example: https://cdn.example.com/home/hero/piece-1.png
+        zigzagsImg:
+          type: string
+          format: uri
+          description: Zigzag decoration URL
+          example: https://cdn.example.com/home/hero/zigzags.png
+        titleH1:
+          type: string
+          example: جلاسية الأمير
+        titleH2:
+          type: string
+          example: لإنتاج الآيس كريم و البراد و العصائر و الحلويات
+        bgColor:
+          type: string
+          example: "#51C9F4"
+        headerBgColor:
+          type: string
+          example: "#51c9f4"
+        h1BgColor:
+          type: string
+          example: "#53352a"
+        h2BgColor:
+          type: string
+          example: "#51c9f4"
+
+    IHomeAboutData:
+      type: object
+      description: Matches TypeScript `IHomeAboutData`
+      required:
+        - title
+        - paragraphs
+        - image
+        - ctaLabel
+        - ctaHref
+      properties:
+        title:
+          type: string
+          example: موهوبون في صناعة الأيسكريم !
+        paragraphs:
+          type: array
+          items:
+            type: string
+          example:
+            - تأسس جلاسيه الأمير عام 2015...
+            - تعمل الشركة على تقديم أجود أنواع الآيس كريم...
+        image:
+          type: string
+          format: uri
+          description: About section character image URL
+          example: https://cdn.example.com/home/about/character.png
+        ctaLabel:
+          type: string
+          example: اعرف أكثر
+        ctaHref:
+          type: string
+          example: /about
+
+    IHomeWhyFeature:
+      type: object
+      description: Matches TypeScript `IHomeWhyFeature`
+      required:
+        - label
+        - image
+      properties:
+        label:
+          type: string
+          example: جودة عالية
+        image:
+          type: string
+          format: uri
+          description: Feature badge background image URL
+          example: https://cdn.example.com/home/why/feature-p.png
+
+    IHomeWhyGlaceData:
+      type: object
+      description: Matches TypeScript `IHomeWhyGlaceData`
+      required:
+        - title
+        - description
+        - features
+        - videoUrl
+        - videoThumbnail
+      properties:
+        title:
+          type: string
+          example: لماذا جلاسيه الأمير؟
+        description:
+          type: string
+          example: جلاسيه الأمير حاصلة على شهادة الجودة العالمية لسلامة الغذاء ISO 22000
+        features:
+          type: array
+          items:
+            $ref: "#/components/schemas/IHomeWhyFeature"
+        videoUrl:
+          type: string
+          format: uri
+          example: https://www.youtube.com/embed/ShMr0XzIqSM
+        videoThumbnail:
+          type: string
+          format: uri
+          description: Thumbnail shown for the video CTA
+          example: https://cdn.example.com/home/why/video-thumb.png
+
+    IHomeBranch:
+      type: object
+      description: Matches TypeScript `IHomeBranch`
+      required:
+        - id
+        - label
+        - mapSrc
+        - address
+        - phone
+        - whatsapp
+        - weekdayHours
+        - fridayHours
+        - borderRadius
+      properties:
+        id:
+          type: string
+          example: ramal
+        label:
+          type: string
+          example: فرع الرمال
+        mapSrc:
+          type: string
+          format: uri
+          description: Google Maps embed URL
+        address:
+          type: string
+          example: غزة، الرمال، شارع الشهداء...
+        phone:
+          type: string
+          example: "0592 226 522"
+        whatsapp:
+          type: string
+          example: "0592 226 522"
+        weekdayHours:
+          type: string
+          example: "PM 11:45 – AM 10:00"
+        fridayHours:
+          type: string
+          example: "PM 11:45 – PM02:00"
+        borderRadius:
+          type: string
+          description: CSS border-radius for the map frame
+          example: "32% 68% 69% 31% / 30% 28% 72% 70%"
+
+    IHomeBranchesData:
+      type: object
+      description: Matches TypeScript `IHomeBranchesData`
+      required:
+        - title
+        - branches
+      properties:
+        title:
+          type: string
+          example: ننتظركم في المواعيد التالية
+        branches:
+          type: array
+          items:
+            $ref: "#/components/schemas/IHomeBranch"
+
+    IHomeEvent:
+      type: object
+      description: Matches TypeScript `IHomeEvent`
+      required:
+        - id
+        - title
+        - image
+        - href
+      properties:
+        id:
+          type: integer
+          example: 1
+        title:
+          type: string
+          example: مشارك معرض الصناعات الغذائية الفلسطينية
+        image:
+          type: string
+          format: uri
+          example: https://cdn.example.com/home/events/1.png
+        href:
+          type: string
+          example: /events/1
+
+    IHomeEventsData:
+      type: object
+      description: Matches TypeScript `IHomeEventsData`
+      required:
+        - title
+        - items
+        - moreLabel
+        - moreHref
+      properties:
+        title:
+          type: string
+          example: الفعاليات و المناسبات
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/IHomeEvent"
+        moreLabel:
+          type: string
+          example: عرض المزيد
+        moreHref:
+          type: string
+          example: /events
+
+    # --- Events (matches src/types/events.types.ts) ---
+    IEvent:
+      type: object
+      description: Matches TypeScript `IEvent` — list card + detail
+      required:
+        - id
+        - title
+        - date
+        - description
+        - listImage
+        - images
+      properties:
+        id:
+          type: integer
+          example: 2
+        title:
+          type: string
+          example: أجواء العيد مع جلاسيه غير
+        date:
+          type: string
+          example: "11/06/2020"
+        description:
+          type: string
+          example: كل عام وانتم بخير بحلول عيد الفطر المبارك...
+        listImage:
+          type: string
+          format: uri
+          description: Card thumbnail image URL
+          example: https://cdn.example.com/events/2-list.png
+        images:
+          type: array
+          description: Gallery images for the detail page
+          items:
+            type: string
+            format: uri
+          example:
+            - https://cdn.example.com/events/2-a.png
+            - https://cdn.example.com/events/2-b.png
+      example:
+        id: 2
+        title: أجواء العيد مع جلاسيه غير
+        date: "11/06/2020"
+        description: كل عام وانتم بخير بحلول عيد الفطر المبارك احتفالنا معكم بالعيد أجمل...
+        listImage: https://cdn.example.com/events/2-list.png
+        images:
+          - https://cdn.example.com/events/2-a.png
+          - https://cdn.example.com/events/2-b.png
+          - https://cdn.example.com/events/2-c.png
+          - https://cdn.example.com/events/2-d.png
+
+    IEventsListResponse:
+      type: object
+      description: Matches TypeScript `IEventsListResponse`
+      required:
+        - items
+        - total
+        - page
+        - perPage
+        - totalPages
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/IEvent"
+        total:
+          type: integer
+          example: 10
+        page:
+          type: integer
+          example: 1
+        perPage:
+          type: integer
+          example: 8
+        totalPages:
+          type: integer
+          example: 2
+      example:
+        items:
+          - id: 2
+            title: أجواء العيد مع جلاسيه غير
+            date: "11/06/2020"
+            description: كل عام وانتم بخير...
+            listImage: https://cdn.example.com/events/2-list.png
+            images:
+              - https://cdn.example.com/events/2-a.png
+        total: 10
+        page: 1
+        perPage: 8
+        totalPages: 2
+
+    IMenuCategory:
+      type: object
+      description: Matches TypeScript `IMenuCategory`
+      required: [id, label, icon, accentColor, gradientFrom, gradientTo, sortOrder]
+      properties:
+        id:
+          type: string
+          example: pancake
+        label:
+          type: string
+          example: بان كيك
+        icon:
+          type: string
+          enum: [ice-cream, cup-soda, cake, glass-water, milk, apple]
+          example: cake
+        accentColor:
+          type: string
+          example: "#f4a851"
+        gradientFrom:
+          type: string
+          example: "#f4a851"
+        gradientTo:
+          type: string
+          example: "#c97d2a"
+        sortOrder:
+          type: integer
+          example: 11
+
+    IFlavorOption:
+      type: object
+      description: Matches TypeScript `IFlavorOption`
+      required: [id, nameAr, nameEn, image, family, available]
+      properties:
+        id:
+          type: string
+          example: pistachio
+        nameAr:
+          type: string
+          example: بيستاشيو
+        nameEn:
+          type: string
+          example: Pistachio
+        image:
+          type: string
+          format: uri
+        family:
+          type: string
+          enum: [classic, special, stevia]
+        available:
+          type: boolean
+        isPremiumMixFlavor:
+          type: boolean
+          description: Priced at a mix's premiumFlavorPrice instead of flavorPrice
+
+    IProductVariant:
+      type: object
+      description: Matches TypeScript `IProductVariant`
+      required: [label, price, available]
+      properties:
+        label:
+          type: string
+          example: نوتيلا
+        price:
+          type: number
+          example: 11
+        description:
+          type: string
+        image:
+          type: string
+          format: uri
+        available:
+          type: boolean
+        isPremiumMixFlavor:
+          type: boolean
+
+    IMixRule:
+      type: object
+      description: Matches TypeScript `IMixRule`
+      required: [id, label, pick, basePrice, flavorPrice, premiumFlavorPrice, flavorOptionIds]
+      properties:
+        id:
+          type: string
+          example: mix
+        label:
+          type: string
+          example: مكس
+        pick:
+          type: integer
+          example: 2
+        basePrice:
+          type: number
+          example: 14
+        flavorPrice:
+          type: number
+          example: 7
+        premiumFlavorPrice:
+          type: number
+          example: 11
+        flavorOptionIds:
+          type: array
+          items:
+            type: string
+          example: [نوتيلا, لوتس, بيستاشيو]
+
+    IPriceCell:
+      type: object
+      description: Matches TypeScript `IPriceCell`
+      required: [flavorFamily, price]
+      properties:
+        flavorFamily:
+          type: string
+          enum: [classic, special, mix]
+        price:
+          type: number
+          example: 4
+
+    IContainerOption:
+      type: object
+      description: Matches TypeScript `IContainerOption`
+      required: [id, label, available]
+      properties:
+        id:
+          type: string
+          example: biscuit
+        label:
+          type: string
+          example: بسكوت
+        available:
+          type: boolean
+        name:
+          type: string
+          description: Overrides the product's own name when this container is picked
+          example: بوظة بسكوت
+        image:
+          type: string
+          format: uri
+        pricingLabel:
+          type: string
+          description: Heading for this container's price table, e.g. "الكاسة"
+          example: الكاسة
+
+    ISizeOption:
+      type: object
+      description: Matches TypeScript `ISizeOption`
+      required: [id, label, maxBalls, prices]
+      properties:
+        id:
+          type: string
+          example: cup-small
+        label:
+          type: string
+          example: صغير
+        maxBalls:
+          type: integer
+          example: 1
+        prices:
+          type: array
+          items:
+            $ref: "#/components/schemas/IPriceCell"
+        containerId:
+          type: string
+          description: Restricts this size to one IContainerOption id
+          example: cup
+
+    IProductBase:
+      type: object
+      description: Fields shared by every IProduct variant (see the `kind` discriminator on IProduct)
+      required: [id, slug, categoryId, name, image, sortOrder, available]
+      properties:
+        id:
+          type: string
+          description: |
+            Opaque backend primary key (auto-increment int or UUID). Used for
+            cart/order/favorites references sent back to the API — NEVER
+            rendered in a URL. Do not assume it equals `slug`.
+          example: "a1c3e5f7-1111-4b22-9c33-aa44bb55cc66"
+        slug:
+          type: string
+          description: |
+            Stable, URL-safe identifier matched against `/menu/order/{type}`
+            and used to fetch the product (`GET /menu/products/{slug}`). Must be
+            unique and stable — renaming the display `name` must NOT change it.
+          example: pancake
+        categoryId:
+          type: string
+          example: pancake
+        name:
+          type: string
+          example: بان كيك
+        description:
+          type: string
+          description: Short product description shown on the order page
+          example: بان كيك طازج بنكهات متنوعة
+        image:
+          type: string
+          format: uri
+        sortOrder:
+          type: integer
+          example: 1
+        available:
+          type: boolean
+        addons:
+          type: array
+          description: |
+            Optional per-unit extras a customer can add to this product
+            (toppings, sauces...). Drives the cart's "تخصيص الإضافات" flow,
+            where the additions can be applied uniformly to all units or
+            differently per individual unit.
+          items:
+            $ref: "#/components/schemas/IAddonOption"
+        hasAddons:
+          type: boolean
+          description: Legacy flag — superseded by a non-empty `addons` array.
+        hasNotes:
+          type: boolean
+        hasFavorites:
+          type: boolean
+        hasImageZoom:
+          type: boolean
+        inStoreOnly:
+          type: boolean
+          description: Shows an in-store-only warning before entering the order flow
+
+    IAddonOption:
+      type: object
+      description: |
+        Matches TypeScript `IAddonOption` — one optional per-unit extra, served
+        by `GET /menu/addons` and/or a product's `addons` catalog. Each addon's
+        `type` (set in the dashboard) decides how it's picked in the cart:
+        `toggle` (on/off) or `counter` (a quantity stepper, e.g. extra biscuit).
+      required: [id, label, price]
+      properties:
+        id:
+          type: string
+          description: Stable slug for the addon
+          example: extra-caramel
+        label:
+          type: string
+          example: صوص كراميل إضافي
+        price:
+          type: number
+          description: Per-unit surcharge (₪), charged per selected quantity
+          example: 3
+        available:
+          type: boolean
+        type:
+          type: string
+          enum: [toggle, counter]
+          default: toggle
+          description: |
+            How the customer picks this addon — `toggle` (on/off checkbox,
+            default) or `counter` (+/- quantity stepper, e.g. extra biscuit ×3).
+          example: toggle
+        maxQty:
+          type: integer
+          description: Optional cap for `counter` addons (max quantity per unit)
+          example: 10
+
+    IBuilderProduct:
+      description: Matches TypeScript `IBuilderProduct` — the size/flavor "wizard" template (cup, family, brad, brad-boza)
+      allOf:
+        - $ref: "#/components/schemas/IProductBase"
+        - type: object
+          required: [kind, sizes]
+          properties:
+            kind:
+              type: string
+              enum: [builder]
+            containerOptions:
+              type: array
+              items:
+                $ref: "#/components/schemas/IContainerOption"
+            includesIceCreamStep:
+              type: boolean
+              description: Brad-boza only — renders an extra ice-type + flavor-ball step
+            iceCreamAddonPrices:
+              type: array
+              items:
+                $ref: "#/components/schemas/IPriceCell"
+            hasExtraBiscuitAddon:
+              type: boolean
+            pricingLabel:
+              type: string
+              description: |
+                Heading for the price table when sizes aren't split per
+                container (e.g. برادة's "أسعار البراد"). Unused when sizes
+                carry their own containerId — the container's own
+                pricingLabel wins in that case.
+              example: البراد
+            sizes:
+              type: array
+              items:
+                $ref: "#/components/schemas/ISizeOption"
+            selectionMode:
+              type: string
+              enum: [repeatable, toggle]
+            flavorFamilies:
+              type: array
+              items:
+                type: string
+                enum: [classic, special, mix]
+
+    IFlatListProduct:
+      description: Matches TypeScript `IFlatListProduct` — the flat items + optional mixes template
+      allOf:
+        - $ref: "#/components/schemas/IProductBase"
+        - type: object
+          required: [kind, items]
+          properties:
+            kind:
+              type: string
+              enum: [flat-list]
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/IProductVariant"
+            mixes:
+              type: array
+              items:
+                $ref: "#/components/schemas/IMixRule"
+
+    IProduct:
+      description: Matches TypeScript `IProduct` — discriminated union on `kind`
+      oneOf:
+        - $ref: "#/components/schemas/IBuilderProduct"
+        - $ref: "#/components/schemas/IFlatListProduct"
+      discriminator:
+        propertyName: kind
+        mapping:
+          builder: "#/components/schemas/IBuilderProduct"
+          flat-list: "#/components/schemas/IFlatListProduct"
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid authentication token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    ServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+# Default security for protected routes.
+# Override with `security: []` on public endpoints (e.g. login, register).
+security:
+  - bearerAuth: []

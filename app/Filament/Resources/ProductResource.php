@@ -1,0 +1,262 @@
+<?php
+
+namespace App\Filament\Resources;
+
+use App\Filament\Resources\ProductResource\Pages;
+use App\Filament\Resources\ProductResource\RelationManagers;
+use App\Models\MenuCategory;
+use App\Models\Product;
+use Filament\Forms;
+use Filament\Forms\Form;
+use Filament\Notifications\Notification;
+use Filament\Resources\Resource;
+use Filament\Tables;
+use Filament\Tables\Table;
+
+class ProductResource extends Resource
+{
+    protected static ?string $model = Product::class;
+    protected static ?string $navigationIcon = 'heroicon-o-shopping-bag';
+    protected static ?string $navigationGroup = 'القائمة';
+    protected static ?string $navigationLabel = 'المنتجات';
+    protected static ?string $modelLabel = 'منتج';
+    protected static ?string $pluralModelLabel = 'المنتجات';
+    protected static ?int $navigationSort = 3;
+    protected static ?string $recordTitleAttribute = 'name';
+
+    public static function getNavigationBadge(): ?string
+    {
+        $off = static::getModel()::where('available', false)->count();
+        return $off > 0 ? (string) $off . ' مُوقف' : null;
+    }
+
+    public static function getNavigationBadgeColor(): ?string { return 'warning'; }
+
+    public static function form(Form $form): Form
+    {
+        return $form->schema([
+            Forms\Components\Tabs::make('Product')
+                ->tabs([
+                    // ─── Tab 1: المعلومات الأساسية ──────────────────────────
+                    Forms\Components\Tabs\Tab::make('المعلومات الأساسية')
+                        ->icon('heroicon-o-information-circle')
+                        ->schema([
+                            Forms\Components\Grid::make(3)->schema([
+                                Forms\Components\TextInput::make('name')
+                                    ->label('اسم المنتج')
+                                    ->required()
+                                    ->maxLength(200)
+                                    ->columnSpan(2),
+                                Forms\Components\TextInput::make('slug')
+                                    ->label('Slug (معرف الرابط)')
+                                    ->required()
+                                    ->maxLength(100)
+                                    ->unique(ignoreRecord: true)
+                                    ->helperText('ثابت — يُستخدم في URL ولا يتغيّر')
+                                    ->columnSpan(1),
+                            ]),
+                            Forms\Components\Grid::make(3)->schema([
+                                Forms\Components\Select::make('category_id')
+                                    ->label('الفئة')
+                                    ->options(MenuCategory::orderBy('sort_order')->pluck('label', 'id'))
+                                    ->required()
+                                    ->searchable()
+                                    ->preload(),
+                                Forms\Components\ToggleButtons::make('kind')
+                                    ->label('نوع المنتج')
+                                    ->options([
+                                        'builder'   => 'Builder (كاسة / براد)',
+                                        'flat-list' => 'Flat-List (قائمة)',
+                                    ])
+                                    ->icons([
+                                        'builder'   => 'heroicon-o-wrench',
+                                        'flat-list' => 'heroicon-o-list-bullet',
+                                    ])
+                                    ->required()
+                                    ->live()
+                                    ->inline(),
+                                Forms\Components\TextInput::make('sort_order')
+                                    ->label('الترتيب')
+                                    ->numeric()
+                                    ->default(1)
+                                    ->minValue(0),
+                            ]),
+                            Forms\Components\Textarea::make('description')
+                                ->label('الوصف (يظهر في صفحة الطلب)')
+                                ->rows(2)
+                                ->maxLength(500),
+                            Forms\Components\FileUpload::make('image')
+                                ->label('صورة المنتج')
+                                ->image()
+                                ->disk('public')
+                                ->directory('products')
+                                ->imagePreviewHeight('150')
+                                ->maxSize(2048),
+                        ]),
+
+                    // ─── Tab 2: إعدادات العرض ───────────────────────────────
+                    Forms\Components\Tabs\Tab::make('إعدادات العرض')
+                        ->icon('heroicon-o-eye')
+                        ->schema([
+                            Forms\Components\Section::make('الحالة')->schema([
+                                Forms\Components\Toggle::make('available')
+                                    ->label('متوفر في القائمة')
+                                    ->helperText('إذا أُوقف يظهر للعميل مع علامة "غير متوفر"')
+                                    ->default(true)
+                                    ->onColor('success')
+                                    ->offColor('danger'),
+                            ])->aside(),
+                            Forms\Components\Section::make('خيارات الواجهة')->description('تحكّم في عناصر الواجهة الظاهرة للعميل')->schema([
+                                Forms\Components\Toggle::make('has_notes')
+                                    ->label('حقل "أضف ملاحظة"'),
+                                Forms\Components\Toggle::make('has_favorites')
+                                    ->label('زر المفضلة ♥ على العناصر'),
+                                Forms\Components\Toggle::make('has_image_zoom')
+                                    ->label('تكبير الصورة عند النقر'),
+                                Forms\Components\Toggle::make('in_store_only')
+                                    ->label('تحذير "داخل المحل فقط"')
+                                    ->helperText('بان كيك، وافل، كريب، بيتزا'),
+                                Forms\Components\Toggle::make('has_extra_biscuit_addon')
+                                    ->label('إضافة بسكوت إضافي (+1₪)'),
+                            ])->columns(2),
+                        ]),
+
+                    // ─── Tab 3: إعدادات Builder ─────────────────────────────
+                    Forms\Components\Tabs\Tab::make('إعدادات Builder')
+                        ->icon('heroicon-o-wrench')
+                        ->visible(fn (Forms\Get $get) => $get('kind') === 'builder')
+                        ->schema([
+                            Forms\Components\Section::make('طريقة اختيار النكهات')->schema([
+                                Forms\Components\ToggleButtons::make('selection_mode')
+                                    ->label('وضع الاختيار')
+                                    ->options([
+                                        'repeatable' => 'Repeatable — نفس النكهة أكثر من مرة',
+                                        'toggle'     => 'Toggle — كل نكهة مرة واحدة فقط',
+                                    ])
+                                    ->inline()
+                                    ->helperText('كاسة/عائلي = repeatable · براد مع بوظة = toggle'),
+                                Forms\Components\CheckboxList::make('flavor_families')
+                                    ->label('عائلات النكهات المتاحة')
+                                    ->options([
+                                        'classic' => '🍦 كلاسيك',
+                                        'special' => '⭐ سبيشال',
+                                        'mix'     => '🔀 مكس',
+                                    ])
+                                    ->columns(3)
+                                    ->helperText('البراد الصادة: لا تحتاج عائلات (لا يوجد picker للنكهات)'),
+                            ])->aside(),
+                            Forms\Components\Section::make('جدول الأسعار')->schema([
+                                Forms\Components\TextInput::make('pricing_label')
+                                    ->label('عنوان جدول الأسعار (اختياري)')
+                                    ->placeholder('مثال: أسعار البراد')
+                                    ->maxLength(100)
+                                    ->helperText('يُستخدم عندما تتشارك جميع الأحجام جدولاً واحداً'),
+                            ])->aside(),
+                            Forms\Components\Section::make('براد مع بوظة فقط')->schema([
+                                Forms\Components\Toggle::make('includes_ice_cream_step')
+                                    ->label('يتضمن خطوة "أضف بوظة"')
+                                    ->helperText('فعّل هذا الخيار لمنتج brad-boza فقط'),
+                            ])->aside(),
+                        ]),
+                ])
+                ->columnSpanFull(),
+        ]);
+    }
+
+    public static function table(Table $table): Table
+    {
+        return $table
+            ->columns([
+                Tables\Columns\ImageColumn::make('image')
+                    ->label('')
+                    ->disk('public')
+                    ->square()
+                    ->size(48)
+                    ->defaultImageUrl(fn () => 'https://placehold.co/48x48/f59e0b/ffffff?text=🍦'),
+                Tables\Columns\TextColumn::make('name')
+                    ->label('المنتج')
+                    ->searchable()
+                    ->sortable()
+                    ->weight(\Filament\Support\Enums\FontWeight::SemiBold)
+                    ->description(fn (Product $r) => $r->slug),
+                Tables\Columns\TextColumn::make('category.label')
+                    ->label('الفئة')
+                    ->badge()
+                    ->color('gray')
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('kind')
+                    ->label('النوع')
+                    ->badge()
+                    ->formatStateUsing(fn (string $state): string => $state === 'builder' ? '⚙ Builder' : '📋 Flat-List')
+                    ->color(fn (string $state): string => match ($state) {
+                        'builder'   => 'primary',
+                        'flat-list' => 'warning',
+                        default     => 'gray',
+                    }),
+                Tables\Columns\ToggleColumn::make('available')
+                    ->label('متوفر')
+                    ->onColor('success')
+                    ->offColor('danger'),
+                Tables\Columns\TextColumn::make('sort_order')
+                    ->label('#')
+                    ->sortable()
+                    ->alignCenter()
+                    ->width(60),
+            ])
+            ->filters([
+                Tables\Filters\SelectFilter::make('category_id')
+                    ->label('الفئة')
+                    ->options(MenuCategory::orderBy('sort_order')->pluck('label', 'id')),
+                Tables\Filters\SelectFilter::make('kind')
+                    ->label('النوع')
+                    ->options(['builder' => 'Builder', 'flat-list' => 'Flat List']),
+                Tables\Filters\TernaryFilter::make('available')
+                    ->label('الحالة'),
+            ])
+            ->actions([
+                Tables\Actions\EditAction::make()->icon('heroicon-m-pencil-square'),
+                Tables\Actions\DeleteAction::make()->icon('heroicon-m-trash'),
+            ])
+            ->defaultSort('sort_order')
+            ->reorderable('sort_order')
+            ->bulkActions([
+                Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\BulkAction::make('enable_all')
+                        ->label('تفعيل المحدد')
+                        ->icon('heroicon-o-eye')
+                        ->color('success')
+                        ->action(fn ($records) => $records->each->update(['available' => true]))
+                        ->deselectRecordsAfterCompletion(),
+                    Tables\Actions\BulkAction::make('disable_all')
+                        ->label('إيقاف المحدد')
+                        ->icon('heroicon-o-eye-slash')
+                        ->color('danger')
+                        ->action(fn ($records) => $records->each->update(['available' => false]))
+                        ->requiresConfirmation()
+                        ->deselectRecordsAfterCompletion(),
+                    Tables\Actions\DeleteBulkAction::make(),
+                ]),
+            ]);
+    }
+
+    public static function getRelationManagers(): array
+    {
+        return [
+            RelationManagers\ItemsRelationManager::class,
+            RelationManagers\MixesRelationManager::class,
+            RelationManagers\ContainersRelationManager::class,
+            RelationManagers\SizesRelationManager::class,
+            RelationManagers\IceCreamAddonPricesRelationManager::class,
+            RelationManagers\ProductAddonsRelationManager::class,
+        ];
+    }
+
+    public static function getPages(): array
+    {
+        return [
+            'index'  => Pages\ListProducts::route('/'),
+            'create' => Pages\CreateProduct::route('/create'),
+            'edit'   => Pages\EditProduct::route('/{record}/edit'),
+        ];
+    }
+}
