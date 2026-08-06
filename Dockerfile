@@ -36,6 +36,6 @@ RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cac
 
 EXPOSE 80
 
-CMD php artisan migrate php artisan make:filament-user --force && /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
+CMD ["sh", "-c", "php artisan migrate --force && exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf"]
 
 
