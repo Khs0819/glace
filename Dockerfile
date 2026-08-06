@@ -36,5 +36,5 @@ RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cac
 
 EXPOSE 80
 
-CMD php artisan make:filament-user && /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
+CMD php artisan db:seed && /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
 
