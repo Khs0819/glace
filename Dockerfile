@@ -1,7 +1,7 @@
 # Stage 1: Build PHP dependencies
 FROM php:8.2-fpm-alpine AS builder
 
-# Install system dependencies
+# Install system dependencies (تم إضافة icu-dev هنا)
 RUN apk add --no-cache \
     zip \
     libzip-dev \
@@ -9,11 +9,12 @@ RUN apk add --no-cache \
     libjpeg-turbo-dev \
     freetype-dev \
     git \
-    oniguruma-dev
+    oniguruma-dev \
+    icu-dev
 
-# Install PHP extensions
+# Install PHP extensions (تم إضافة intl هنا)
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install pdo_mysql mbstring zip gd pcntl bcmath
+    && docker-php-ext-install pdo_mysql mbstring zip gd pcntl bcmath intl
 
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
@@ -27,9 +28,10 @@ RUN composer install --no-dev --optimize-autoloader --no-interaction --no-script
 # Stage 2: Production environment
 FROM php:8.2-fpm-alpine
 
-RUN apk add --no-cache nginx supervisor
+RUN apk add --no-cache nginx supervisor icu-libs
 
-RUN docker-php-ext-install pdo_mysql bcmath
+# تفعيل الإضافات في مرحلة التشغيل النهائية أيضاً
+RUN docker-php-ext-install pdo_mysql bcmath intl
 
 WORKDIR /var/www/html
 
@@ -41,8 +43,9 @@ COPY ./docker/nginx.conf /etc/nginx/nginx.conf
 COPY ./docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Set permissions for Laravel
-RUN chown -r www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
 EXPOSE 80
 
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+
