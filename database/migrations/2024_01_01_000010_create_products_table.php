@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('kind'); // builder|flat-list
             $table->string('name');
             $table->text('description')->nullable();
-            $table->string('image');
+            $table->string('image')->nullable();
             $table->unsignedSmallInteger('sort_order')->default(0);
             $table->boolean('available')->default(true);
             $table->boolean('has_addons')->default(false); // legacy flag
