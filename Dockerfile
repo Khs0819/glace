@@ -1,6 +1,6 @@
 FROM php:8.2-fpm-alpine
 
-# تثبيت متطلبات النظام وامتدادات PHP المطلوبة لـ Laravel و Filament
+# تثبيت متطلبات النظام
 RUN apk add --no-cache \
     nginx \
     supervisor \
@@ -17,55 +17,64 @@ RUN apk add --no-cache \
     nodejs \
     npm
 
-# تثبيت وتفعيل إضافات PHP
+# تثبيت إضافات PHP
 RUN docker-php-ext-configure gd \
-        --with-freetype \
-        --with-jpeg \
+    --with-freetype \
+    --with-jpeg \
     && docker-php-ext-install \
-        pdo_mysql \
-        mbstring \
-        zip \
-        gd \
-        pcntl \
-        bcmath \
-        intl
+    pdo_mysql \
+    mbstring \
+    zip \
+    gd \
+    pcntl \
+    bcmath \
+    intl
 
-# تثبيت Composer
+# تجهيز مجلدات Nginx المؤقتة
+RUN mkdir -p \
+    /var/lib/nginx/tmp/client_body \
+    /var/lib/nginx/tmp/proxy \
+    /var/lib/nginx/tmp/fastcgi \
+    /var/lib/nginx/tmp/uwsgi \
+    /var/lib/nginx/tmp/scgi \
+    && chown -R www-data:www-data /var/lib/nginx \
+    && chmod -R 755 /var/lib/nginx
+
+# Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
-# نسخ ملفات Composer أولاً للاستفادة من Docker cache
+# Composer cache
 COPY composer.json composer.lock ./
 
-# تثبيت حزم Laravel
 RUN composer install \
     --no-dev \
     --optimize-autoloader \
     --no-interaction \
     --no-scripts
 
-# نسخ ملفات المشروع
+# نسخ المشروع
 COPY . .
 
-# تثبيت حزم Node.js وبناء ملفات Vite
+# Node / Vite
 RUN npm ci
-
 RUN npm run build
 
-# نسخ ملفات إعدادات الخادم والتشغيل
+# إعدادات Nginx و Supervisor
 COPY ./docker/nginx.conf /etc/nginx/nginx.conf
+COPY ./docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-COPY ./docker/supervisord.conf \
-    /etc/supervisor/conf.d/supervisord.conf
-
-# ضبط الصلاحيات
+# Laravel permissions
 RUN chown -R www-data:www-data \
     /var/www/html/storage \
     /var/www/html/bootstrap/cache
 
+# التأكد من صلاحيات Nginx
+RUN chown -R www-data:www-data /var/lib/nginx \
+    && chmod -R 755 /var/lib/nginx
+
 EXPOSE 80
 
-# تشغيل migrations ثم التطبيق
 CMD php artisan migrate --force && \
     /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
