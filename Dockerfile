@@ -1,6 +1,9 @@
 FROM php:8.2-fpm-alpine
 
-# تثبيت متطلبات النظام وامتدادات PHP المطلوبة لـ Laravel و Filament
+# =========================================================
+# System dependencies
+# =========================================================
+
 RUN apk add --no-cache \
     nginx \
     supervisor \
@@ -17,7 +20,10 @@ RUN apk add --no-cache \
     nodejs \
     npm
 
-# تثبيت وتفعيل إضافات PHP
+# =========================================================
+# PHP extensions
+# =========================================================
+
 RUN docker-php-ext-configure gd \
         --with-freetype \
         --with-jpeg \
@@ -30,42 +36,66 @@ RUN docker-php-ext-configure gd \
         bcmath \
         intl
 
-# تثبيت Composer
+# =========================================================
+# Composer
+# =========================================================
+
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
-# نسخ ملفات Composer أولاً للاستفادة من Docker cache
+# =========================================================
+# Composer dependencies
+# =========================================================
+
 COPY composer.json composer.lock ./
 
-# تثبيت حزم Laravel
 RUN composer install \
     --no-dev \
     --optimize-autoloader \
     --no-interaction \
     --no-scripts
 
-# نسخ ملفات المشروع
+# =========================================================
+# Application
+# =========================================================
+
 COPY . .
 
-# تثبيت حزم Node.js وبناء ملفات Vite
+# =========================================================
+# Frontend / Vite
+# =========================================================
+
 RUN npm ci
 
 RUN npm run build
 
-# نسخ ملفات إعدادات الخادم والتشغيل
+# =========================================================
+# Nginx + Supervisor
+# =========================================================
+
 COPY ./docker/nginx.conf /etc/nginx/nginx.conf
 
 COPY ./docker/supervisord.conf \
     /etc/supervisor/conf.d/supervisord.conf
 
-# ضبط الصلاحيات
+# =========================================================
+# Permissions
+# =========================================================
+
 RUN chown -R www-data:www-data \
     /var/www/html/storage \
     /var/www/html/bootstrap/cache
 
+# =========================================================
+# Port
+# =========================================================
+
 EXPOSE 80
 
-# تشغيل migrations ثم التطبيق
+# =========================================================
+# Start application
+# =========================================================
+
 CMD php artisan migrate --force && \
     /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
