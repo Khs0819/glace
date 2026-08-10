@@ -33,6 +33,11 @@ class MixesRelationManager extends RelationManager
                     ->required()
                     ->minValue(1)
                     ->helperText('كم نكهة يختار العميل؟'),
+                Forms\Components\Toggle::make('available')
+                    ->label('متاح')
+                    ->default(true)
+                    ->onColor('success')
+                    ->offColor('danger'),
                 Forms\Components\TextInput::make('sort_order')
                     ->label('الترتيب')
                     ->numeric()
@@ -62,13 +67,13 @@ class MixesRelationManager extends RelationManager
                         ->suffix('₪'),
                 ])->columns(3),
 
-            Forms\Components\Section::make('النكهات المتاحة')
-                ->description('أدخل معرّف كل نكهة واضغط Enter — مثال: nutella · lotus · pistachio')
+            Forms\Components\Section::make('عناصر المكس')
+                ->description('أدخل معرف كل عنصر (items[].id) واضغط Enter — مثال: nutella · lotus · pistachio')
                 ->schema([
-                    Forms\Components\TagsInput::make('flavor_option_ids')
+                    Forms\Components\TagsInput::make('item_ids')
                         ->label('')
                         ->separator(',')
-                        ->placeholder('اكتب اسم/معرف النكهة ثم اضغط Enter'),
+                        ->placeholder('اكتب معرف العنصر ثم اضغط Enter'),
                 ]),
         ]);
     }
@@ -84,6 +89,9 @@ class MixesRelationManager extends RelationManager
                 Tables\Columns\TextColumn::make('label')
                     ->label('الاسم')
                     ->weight(\Filament\Support\Enums\FontWeight::Medium),
+                Tables\Columns\IconColumn::make('available')
+                    ->label('متاح')
+                    ->boolean(),
                 Tables\Columns\TextColumn::make('pick')
                     ->label('عدد الاختيارات')
                     ->badge()

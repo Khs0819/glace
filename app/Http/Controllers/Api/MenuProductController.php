@@ -38,11 +38,11 @@ class MenuProductController extends Controller
             'items',
             'mixes',
             'addons',
+            'flavors',
         ])->where('slug', $slug)->first();
 
-        // Return null (not 404) per spec — frontend handles gracefully
         if (! $product) {
-            return response()->json(null);
+            return response()->json(['message' => 'Product not found'], 404);
         }
 
         return response()->json(new ProductResource($product));

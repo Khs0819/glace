@@ -10,55 +10,36 @@ class EventSeeder extends Seeder
 {
     public function run(): void
     {
-        // Event::truncate();
-        // EventImage::truncate();
+        Event::query()->each(fn ($e) => $e->delete());
+
+        // Data ported from fake-data/events.ts → FAKE_EVENTS
+        $desc = 'كل عام وانتم بخير بحلول عيد الفطر المبارك احتفالنا معكم بالعيد أجمل . أهلا وسهلاُ بكم في جلاسيه فرع الاتصالات تفضلوا عنا , هناك عروض مميزة بانتظاركم';
 
         $events = [
-            [
-                'title'       => 'مشارك معرض الصناعات الغذائية الفلسطينية',
-                'date'        => '15/03/2023',
-                'description' => 'شارك جلاسيه الأمير في معرض الصناعات الغذائية الفلسطينية الذي أقيم في مدينة غزة، وعرض أحدث منتجاته من الآيس كريم والحلويات الفاخرة.',
-                'list_image'  => 'https://cdn.example.com/events/1-list.png',
-                'images'      => [
-                    'https://cdn.example.com/events/1-a.png',
-                    'https://cdn.example.com/events/1-b.png',
-                    'https://cdn.example.com/events/1-c.png',
-                ],
-            ],
-            [
-                'title'       => 'أجواء العيد مع جلاسيه الأمير',
-                'date'        => '11/06/2020',
-                'description' => 'كل عام وانتم بخير بحلول عيد الفطر المبارك احتفالنا معكم بالعيد أجمل مع مجموعة خاصة من نكهات الآيس كريم والحلويات المميزة.',
-                'list_image'  => 'https://cdn.example.com/events/2-list.png',
-                'images'      => [
-                    'https://cdn.example.com/events/2-a.png',
-                    'https://cdn.example.com/events/2-b.png',
-                    'https://cdn.example.com/events/2-c.png',
-                    'https://cdn.example.com/events/2-d.png',
-                ],
-            ],
-            [
-                'title'       => 'افتتاح فرع تل الهوا',
-                'date'        => '01/09/2022',
-                'description' => 'يسعدنا الإعلان عن افتتاح فرعنا الجديد في منطقة تل الهوا، نقدم لكم نفس الجودة والنكهات الرائعة في موقع أقرب إليكم.',
-                'list_image'  => 'https://cdn.example.com/events/3-list.png',
-                'images'      => [
-                    'https://cdn.example.com/events/3-a.png',
-                    'https://cdn.example.com/events/3-b.png',
-                ],
-            ],
+            'مشارك معرض الصناعات الغذائية الفلسطينية',
+            'أجواء العيد مع جلاسيه غير',
+            'افتتاح فرع جديد فرع الأمن العام',
+            'تقدم إدارة جلاسيه بالشكر و التقدير لكل فرد',
+            'مشارك معرض الصناعات الغذائية الفلسطينية',
+            'أجواء العيد مع جلاسيه غير',
+            'افتتاح فرع جديد فرع الأمن العام',
+            'تقدم إدارة جلاسيه بالشكر و التقدير لكل فرد',
+            'افتتاح فرع جديد فرع الأمن العام',
+            'تقدم إدارة جلاسيه بالشكر و التقدير لكل فرد',
         ];
 
-        foreach ($events as $eventData) {
-            $images = $eventData['images'];
-            unset($eventData['images']);
+        foreach ($events as $title) {
+            $event = Event::create([
+                'title'       => $title,
+                'date'        => '11/06/2020',
+                'description' => $desc,
+                'list_image'  => null,
+            ]);
 
-            $event = Event::create($eventData);
-
-            foreach ($images as $i => $url) {
+            for ($i = 0; $i < 4; $i++) {
                 EventImage::create([
                     'event_id'   => $event->id,
-                    'image_url'  => $url,
+                    'image_url'  => null,
                     'sort_order' => $i,
                 ]);
             }

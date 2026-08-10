@@ -246,6 +246,7 @@ class ProductResource extends Resource
             RelationManagers\MixesRelationManager::class,
             RelationManagers\ContainersRelationManager::class,
             RelationManagers\SizesRelationManager::class,
+            RelationManagers\FlavorsRelationManager::class,
             RelationManagers\IceCreamAddonPricesRelationManager::class,
             RelationManagers\ProductAddonsRelationManager::class,
         ];

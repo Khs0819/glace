@@ -38,6 +38,12 @@ class SizesRelationManager extends RelationManager
                     ->maxLength(100)
                     ->placeholder('اتركه فارغاً إذا ينطبق على جميع الحاويات')
                     ->helperText('مثال: cup · biscuit'),
+                Forms\Components\Toggle::make('available')
+                    ->label('متوفر')
+                    ->default(true)
+                    ->onColor('success')
+                    ->offColor('danger')
+                    ->helperText('غير المتوفر يظهر بشارة "غير متوفر" ولا يختفي'),
                 Forms\Components\TextInput::make('sort_order')
                     ->label('الترتيب')
                     ->numeric()
@@ -96,6 +102,10 @@ class SizesRelationManager extends RelationManager
                     ->badge()
                     ->color('info')
                     ->placeholder('الكل'),
+                Tables\Columns\ToggleColumn::make('available')
+                    ->label('متوفر')
+                    ->onColor('success')
+                    ->offColor('danger'),
                 Tables\Columns\TextColumn::make('prices_count')
                     ->label('أسعار مُضافة')
                     ->counts('prices')

@@ -18,6 +18,12 @@ class ItemsRelationManager extends RelationManager
     {
         return $form->schema([
             Forms\Components\Section::make()->schema([
+                Forms\Components\TextInput::make('slug')
+                    ->label('المعرف (ID)')
+                    ->required()
+                    ->maxLength(100)
+                    ->helperText('ثابت لا يتغير — مثال: nutella · lotus · arabic-coffee')
+                    ->columnSpanFull(),
                 Forms\Components\TextInput::make('label')
                     ->label('اسم العنصر')
                     ->required()

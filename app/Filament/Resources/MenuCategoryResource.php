@@ -58,6 +58,12 @@ class MenuCategoryResource extends Resource
                         ->required()
                         ->minValue(1)
                         ->maxValue(20),
+                    Forms\Components\Toggle::make('available')
+                        ->label('ظاهرة في القائمة')
+                        ->default(true)
+                        ->onColor('success')
+                        ->offColor('danger')
+                        ->helperText('إيقاف فئة كاملة (مثلاً مشروبات ساخنة صيفاً)'),
                 ])->columns(2),
 
             Forms\Components\Section::make('الألوان')
@@ -99,6 +105,10 @@ class MenuCategoryResource extends Resource
                     ->label('الترتيب')
                     ->sortable()
                     ->alignCenter(),
+                Tables\Columns\ToggleColumn::make('available')
+                    ->label('ظاهرة')
+                    ->onColor('success')
+                    ->offColor('danger'),
                 Tables\Columns\TextColumn::make('products_count')
                     ->label('منتجات')
                     ->counts('products')

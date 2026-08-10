@@ -13,6 +13,7 @@ class MenuCategoryResource extends JsonResource
             'id'           => $this->id,
             'label'        => $this->label,
             'icon'         => $this->icon,
+            'available'    => $this->available,
             'accentColor'  => $this->accent_color,
             'gradientFrom' => $this->gradient_from,
             'gradientTo'   => $this->gradient_to,

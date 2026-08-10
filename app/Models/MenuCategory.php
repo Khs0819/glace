@@ -13,7 +13,11 @@ class MenuCategory extends Model
 
     protected $fillable = [
         'id', 'label', 'icon', 'accent_color',
-        'gradient_from', 'gradient_to', 'sort_order',
+        'gradient_from', 'gradient_to', 'sort_order', 'available',
+    ];
+
+    protected $casts = [
+        'available' => 'boolean',
     ];
 
     public function products(): HasMany

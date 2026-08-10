@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Addon;
+use App\Models\Flavor;
 use App\Models\IceCreamAddonPrice;
 use App\Models\Product;
 use App\Models\ProductContainer;
@@ -86,21 +87,22 @@ class ProductSeeder extends Seeder
         }
     }
 
-    private function addItem(Product $p, string $label, float $price, bool $available = true, bool $isPremium = false, ?string $description = null, ?string $image = null, int $sort = 0): void
+    private function addItem(Product $p, string $slug, string $label, float $price, bool $available = true, bool $isPremium = false, ?string $description = null, ?string $image = null, int $sort = 0): void
     {
         ProductItem::create([
-            'product_id'           => $p->id,
-            'label'                => $label,
-            'price'                => $price,
-            'available'            => $available,
-            'is_premium_mix_flavor'=> $isPremium,
-            'description'          => $description,
-            'image'                => $image,
-            'sort_order'           => $sort,
+            'product_id'            => $p->id,
+            'slug'                  => $slug,
+            'label'                 => $label,
+            'price'                 => $price,
+            'available'             => $available,
+            'is_premium_mix_flavor' => $isPremium,
+            'description'           => $description,
+            'image'                 => $image,
+            'sort_order'            => $sort,
         ]);
     }
 
-    private function addMix(Product $p, string $slug, string $label, int $pick, float $base, float $flavorPrice, float $premiumPrice, array $flavorOptionIds, int $sort = 0): void
+    private function addMix(Product $p, string $slug, string $label, int $pick, float $base, float $flavorPrice, float $premiumPrice, array $itemIds, int $sort = 0): void
     {
         ProductMix::create([
             'product_id'           => $p->id,
@@ -110,7 +112,8 @@ class ProductSeeder extends Seeder
             'base_price'           => $base,
             'flavor_price'         => $flavorPrice,
             'premium_flavor_price' => $premiumPrice,
-            'flavor_option_ids'    => $flavorOptionIds,
+            'item_ids'             => $itemIds,
+            'available'            => true,
             'sort_order'           => $sort,
         ]);
     }
@@ -147,22 +150,20 @@ class ProductSeeder extends Seeder
             'has_notes'              => true,
         ]);
 
-        $this->addContainer($p, 'cup',      'كاسة',     true, 'بوظة كاسة',    null, 'الكاسة',   0);
-        $this->addContainer($p, 'biscuit',  'بسكوت',    true, 'بوظة بسكوت',   'https://cdn.example.com/menu/biscuit.jpg', 'البسكوت', 1);
+        $this->addContainer($p, 'cup',      'كاسة',     true, 'بوظة كاسة',     null, 'الكاسة',    0);
+        $this->addContainer($p, 'biscuit',  'بسكوت',    true, 'بوظة بسكوت',    'https://cdn.example.com/menu/biscuit.jpg', 'البسكوت', 1);
         $this->addContainer($p, 'takeaway', 'تيك اواي', true, 'بوظة تيك اواي', null, 'التيك اواي', 2);
 
-        // Cup sizes
-        $this->addSize($p, 'cup-small',  'صغير', 1, ['classic' => 2, 'special' => 4], 'cup', 0);
-        $this->addSize($p, 'cup-medium', 'وسط',  2, ['classic' => 3, 'special' => 5], 'cup', 1);
-        $this->addSize($p, 'cup-large',  'كبير', 3, ['classic' => 5, 'special' => 7], 'cup', 2);
+        $this->addSize($p, 'cup-small',      'صغير',     1, ['classic' => 2, 'special' => 4],              'cup',      0);
+        $this->addSize($p, 'cup-medium',     'وسط',      2, ['classic' => 3, 'special' => 5],              'cup',      1);
+        $this->addSize($p, 'cup-large',      'كبير',     3, ['classic' => 5, 'special' => 7],              'cup',      2);
+        $this->addSize($p, 'biscuit-small',  'صغير',     1, ['classic' => 2],                              'biscuit',  3);
+        $this->addSize($p, 'biscuit-medium', 'وسط',      2, ['classic' => 3, 'special' => 5],              'biscuit',  4);
+        $this->addSize($p, 'biscuit-large',  'كبير',     3, ['classic' => 5, 'special' => 7],              'biscuit',  5);
+        $this->addSize($p, 'takeaway-size',  'تيك اواي', 3, ['classic' => 5, 'special' => 7],              'takeaway', 6);
 
-        // Biscuit sizes (no special for small)
-        $this->addSize($p, 'biscuit-small',  'صغير', 1, ['classic' => 2],              'biscuit', 3);
-        $this->addSize($p, 'biscuit-medium', 'وسط',  2, ['classic' => 3, 'special' => 5], 'biscuit', 4);
-        $this->addSize($p, 'biscuit-large',  'كبير', 3, ['classic' => 5, 'special' => 7], 'biscuit', 5);
-
-        // Takeaway (one size)
-        $this->addSize($p, 'takeaway-size', 'تيك اواي', 3, ['classic' => 5, 'special' => 7], 'takeaway', 6);
+        // Attach all 23 global flavors
+        $p->flavors()->sync(Flavor::pluck('id'));
     }
 
     // ─── 2. بوظة عائلي (family) — builder ────────────────────────────────────
@@ -241,17 +242,17 @@ class ProductSeeder extends Seeder
         $this->addContainer($p, 'mango', 'مانجا', true, null, null, null, 1);
         $this->addContainer($p, 'mix',   'مكس',   true, null, null, null, 2);
 
-        // Base prices (ice cream price added on top)
         $this->addSize($p, 'brad-boza-small',  'صغير', 2, ['classic' => 1], null, 0);
         $this->addSize($p, 'brad-boza-medium', 'وسط',  3, ['classic' => 2], null, 1);
         $this->addSize($p, 'brad-boza-large',  'كبير', 4, ['classic' => 3], null, 2);
 
-        // Ice cream addon prices (additive per-family)
         IceCreamAddonPrice::insert([
             ['product_id' => $p->id, 'flavor_family' => 'classic', 'price' => 3, 'created_at' => now(), 'updated_at' => now()],
             ['product_id' => $p->id, 'flavor_family' => 'special', 'price' => 5, 'created_at' => now(), 'updated_at' => now()],
             ['product_id' => $p->id, 'flavor_family' => 'mix',     'price' => 4, 'created_at' => now(), 'updated_at' => now()],
         ]);
+
+        $p->flavors()->sync(Flavor::pluck('id'));
     }
 
     // ─── 5. مشروبات باردة (cold-drinks) — flat-list ──────────────────────────
@@ -270,16 +271,11 @@ class ProductSeeder extends Seeder
             'has_notes'     => true,
         ]);
 
-        $items = [
-            ['آيس كوفي كراميل',      8,  true],
-            ['آيس موكا',             8,  true],
-            ['سبانش لاتيه كراميل',   10, true],
-            ['بوبا شيك كوفي/فراولة', 12, true],
-            ['مياه صغيرة',           1,  true],
-        ];
-        foreach ($items as $i => [$label, $price, $avail]) {
-            $this->addItem($p, $label, $price, $avail, false, null, null, $i);
-        }
+        $this->addItem($p, 'iced-coffee-caramel',  'آيس كوفي كراميل',       8,  true,  false, null, null, 0);
+        $this->addItem($p, 'iced-mocha',           'آيس موكا',               8,  true,  false, null, null, 1);
+        $this->addItem($p, 'spanish-latte-caramel','سبانش لاتيه كراميل',    10, true,  false, null, null, 2);
+        $this->addItem($p, 'boba-shake',           'بوبا شيك كوفي/فراولة',  12, true,  false, null, null, 3);
+        $this->addItem($p, 'small-water',          'مياه صغيرة',             1,  true,  false, null, null, 4);
     }
 
     // ─── 6. مشروبات ساخنة (hot-drinks) — flat-list ───────────────────────────
@@ -298,15 +294,10 @@ class ProductSeeder extends Seeder
             'has_notes'     => true,
         ]);
 
-        $items = [
-            ['قهوة عربية',       5],
-            ['نسكافيه حار',      6],
-            ['شاي',              4],
-            ['هوت شوكولاتة',     8],
-        ];
-        foreach ($items as $i => [$label, $price]) {
-            $this->addItem($p, $label, $price, true, false, null, null, $i);
-        }
+        $this->addItem($p, 'arabic-coffee', 'قهوة عربية',    5, true, false, null, null, 0);
+        $this->addItem($p, 'hot-nescafe',   'نسكافيه حار',   6, true, false, null, null, 1);
+        $this->addItem($p, 'tea',           'شاي',           4, true, false, null, null, 2);
+        $this->addItem($p, 'hot-chocolate', 'هوت شوكولاتة',  8, true, false, null, null, 3);
     }
 
     // ─── 7. عصائر طبيعية (juices) — flat-list ────────────────────────────────
@@ -325,10 +316,9 @@ class ProductSeeder extends Seeder
             'has_notes'     => true,
         ]);
 
-        $items = [['فراولة', 5], ['بلوليمونادا', 6], ['مانجا', 7]];
-        foreach ($items as $i => [$label, $price]) {
-            $this->addItem($p, $label, $price, true, false, null, null, $i);
-        }
+        $this->addItem($p, 'strawberry',   'فراولة',      5, true, false, null, null, 0);
+        $this->addItem($p, 'blue-lemonade','بلوليمونادا', 6, true, false, null, null, 1);
+        $this->addItem($p, 'mango',        'مانجا',       7, true, false, null, null, 2);
     }
 
     // ─── 8. ذرة (corn) — flat-list ───────────────────────────────────────────
@@ -347,14 +337,9 @@ class ProductSeeder extends Seeder
             'has_notes'     => true,
         ]);
 
-        $items = [
-            ['ذرة سادة',        5],
-            ['ذرة بالجبنة',     7],
-            ['ذرة بالشوكولاتة', 8],
-        ];
-        foreach ($items as $i => [$label, $price]) {
-            $this->addItem($p, $label, $price, true, false, null, null, $i);
-        }
+        $this->addItem($p, 'plain',     'ذرة سادة',        5, true, false, null, null, 0);
+        $this->addItem($p, 'cheese',    'ذرة بالجبنة',     7, true, false, null, null, 1);
+        $this->addItem($p, 'chocolate', 'ذرة بالشوكولاتة', 8, true, false, null, null, 2);
     }
 
     // ─── 9. ميلك شيك (milkshake) — flat-list ────────────────────────────────
@@ -372,35 +357,29 @@ class ProductSeeder extends Seeder
             'has_image_zoom'=> true,
         ]);
 
-        // Per-product addons
-        $this->addProductAddon($p, 'ms-caramel',  'صوص كراميل إضافي',  3, 'toggle', null, 0);
-        $this->addProductAddon($p, 'ms-nutella',  'صوص نوتيلا إضافي',  4, 'toggle', null, 1);
-        $this->addProductAddon($p, 'ms-nuts',     'بندق مبشور',         4, 'toggle', null, 2);
-        $this->addProductAddon($p, 'ms-oreo',     'قطع أوريو',          3, 'toggle', null, 3);
-        $this->addProductAddon($p, 'ms-lotus',    'بسكوت لوتس',         4, 'toggle', null, 4);
-        $this->addProductAddon($p, 'ms-cream',    'كريمة مخفوقة',       2, 'toggle', null, 5);
+        $this->addProductAddon($p, 'ms-caramel', 'صوص كراميل إضافي',  3, 'toggle', null, 0);
+        $this->addProductAddon($p, 'ms-nutella', 'صوص نوتيلا إضافي',  4, 'toggle', null, 1);
+        $this->addProductAddon($p, 'ms-nuts',    'بندق مبشور',         4, 'toggle', null, 2);
+        $this->addProductAddon($p, 'ms-oreo',    'قطع أوريو',          3, 'toggle', null, 3);
+        $this->addProductAddon($p, 'ms-lotus',   'بسكوت لوتس',         4, 'toggle', null, 4);
+        $this->addProductAddon($p, 'ms-cream',   'كريمة مخفوقة',       2, 'toggle', null, 5);
 
-        $items = [
-            ['كلاسيك شوكولاته', 8, true,  false],
-            ['كلاسيك فانيلا',   8, true,  false],
-            ['كلاسيك فراولة',   8, false, false],
-            ['كلاسيك كاراميل',  8, true,  false],
-            ['كلاسيك نسكافيه',  8, true,  false],
-            ['كلاسيك باروكا',   8, false, false],
-            ['سبيشال نوتيلا',   10, true,  false],
-            ['سبيشال لوتس',     10, true,  false],
-            ['سبيشال كندر',     10, true,  false],
-            ['سبيشال أوريو',    10, false, false],
-            ['سبيشال كت كات',   10, true,  false],
-            ['سبيشال فيتنس',    10, true,  false],
-            ['سبيشال شوفان',    10, true,  false],
-            ['سيرلاك (أطعم خاصة)',   8, true, false],
-            ['اينشتاين (أطعم خاصة)', 9, true, false],
-            ['بيستاشيو (أطعم خاصة)', 13, true, false],
-        ];
-        foreach ($items as $i => [$label, $price, $avail, $premium]) {
-            $this->addItem($p, $label, $price, $avail, $premium, null, null, $i);
-        }
+        $this->addItem($p, 'chocolate', 'كلاسيك شوكولاته',        8,  true,  false, null, null, 0);
+        $this->addItem($p, 'vanilla',   'كلاسيك فانيلا',           8,  true,  false, null, null, 1);
+        $this->addItem($p, 'strawberry','كلاسيك فراولة',           8,  false, false, null, null, 2);
+        $this->addItem($p, 'caramel',   'كلاسيك كاراميل',          8,  true,  false, null, null, 3);
+        $this->addItem($p, 'nescafe',   'كلاسيك نسكافيه',          8,  true,  false, null, null, 4);
+        $this->addItem($p, 'bazooka',   'كلاسيك باروكا',           8,  false, false, null, null, 5);
+        $this->addItem($p, 'nutella',   'سبيشال نوتيلا',           10, true,  false, null, null, 6);
+        $this->addItem($p, 'lotus',     'سبيشال لوتس',             10, true,  false, null, null, 7);
+        $this->addItem($p, 'kinder',    'سبيشال كندر',             10, true,  false, null, null, 8);
+        $this->addItem($p, 'oreo',      'سبيشال أوريو',            10, false, false, null, null, 9);
+        $this->addItem($p, 'kitkat',    'سبيشال كت كات',           10, true,  false, null, null, 10);
+        $this->addItem($p, 'fitness',   'سبيشال فيتنس',            10, true,  false, null, null, 11);
+        $this->addItem($p, 'oat',       'سبيشال شوفان',            10, true,  false, null, null, 12);
+        $this->addItem($p, 'cerelac',   'سيرلاك (أطعم خاصة)',      8,  true,  false, null, null, 13);
+        $this->addItem($p, 'einstein',  'اينشتاين (أطعم خاصة)',    9,  true,  false, null, null, 14);
+        $this->addItem($p, 'pistachio', 'بيستاشيو (أطعم خاصة)',   13, true,  false, null, null, 15);
     }
 
     // ─── 10. كنافة آيس كريم (kunafa) — flat-list ─────────────────────────────
@@ -418,20 +397,15 @@ class ProductSeeder extends Seeder
             'has_notes'     => true,
         ]);
 
-        $items = [
-            ['كنافة عربية',                 8,  true,  false],
-            ['كنافة لوتس',                  8,  true,  false],
-            ['كنافة نوتيلا',                8,  true,  false],
-            ['كنافة بلوبيري',               8,  false, false],
-            ['كنافة دوندورما بيستاشيو',     12, true,  true],
-            ['كنافة طاقة (كل خميس)',        12, false, false],
-        ];
-        foreach ($items as $i => [$label, $price, $avail, $premium]) {
-            $this->addItem($p, $label, $price, $avail, $premium, null, null, $i);
-        }
+        $this->addItem($p, 'arabian',            'كنافة عربية',                8,  true,  false, null, null, 0);
+        $this->addItem($p, 'lotus',              'كنافة لوتس',                 8,  true,  false, null, null, 1);
+        $this->addItem($p, 'nutella',            'كنافة نوتيلا',               8,  true,  false, null, null, 2);
+        $this->addItem($p, 'blueberry',          'كنافة بلوبيري',              8,  false, false, null, null, 3);
+        $this->addItem($p, 'dondurma-pistachio', 'كنافة دوندورما بيستاشيو',   12, true,  true,  null, null, 4);
+        $this->addItem($p, 'energy',             'كنافة طاقة (كل خميس)',      12, false, false, null, null, 5);
 
-        $flavorIds = ['كنافة عربية', 'كنافة لوتس', 'كنافة نوتيلا', 'كنافة دوندورما بيستاشيو'];
-        $this->addMix($p, 'mix', 'مكس (اختر طعمين)', 2, 10, 5, 8, $flavorIds, 0);
+        $this->addMix($p, 'mix', 'مكس (اختر طعمين)', 2, 10, 5, 8,
+            ['arabian', 'lotus', 'nutella', 'blueberry', 'dondurma-pistachio', 'energy'], 0);
     }
 
     // ─── 11. لقيمات (loqaimat) — flat-list ───────────────────────────────────
@@ -449,21 +423,16 @@ class ProductSeeder extends Seeder
             'has_notes'     => true,
         ]);
 
-        $items = [
-            ['لقيمة عربية',                 8,  true,  false],
-            ['لقيمة لوتس',                  8,  true,  false],
-            ['لقيمة نوتيلا',                8,  true,  false],
-            ['لقيمة بلوبيري',               8,  false, false],
-            ['لقيمة دوندورما بيستاشيو',     12, true,  true],
-            ['لقيمة طاقة (كل خميس)',        12, false, false],
-        ];
-        foreach ($items as $i => [$label, $price, $avail, $premium]) {
-            $this->addItem($p, $label, $price, $avail, $premium, null, null, $i);
-        }
+        $this->addItem($p, 'arabian',            'لقيمة عربية',                8,  true,  false, null, null, 0);
+        $this->addItem($p, 'lotus',              'لقيمة لوتس',                 8,  true,  false, null, null, 1);
+        $this->addItem($p, 'nutella',            'لقيمة نوتيلا',               8,  true,  false, null, null, 2);
+        $this->addItem($p, 'blueberry',          'لقيمة بلوبيري',              8,  false, false, null, null, 3);
+        $this->addItem($p, 'dondurma-pistachio', 'لقيمة دوندورما بيستاشيو',   12, true,  true,  null, null, 4);
+        $this->addItem($p, 'energy',             'لقيمة طاقة (كل خميس)',      12, false, false, null, null, 5);
 
-        $flavorIds = ['لقيمة عربية', 'لقيمة لوتس', 'لقيمة نوتيلا', 'لقيمة دوندورما بيستاشيو'];
-        $this->addMix($p, 'mix',       'مكس (اختر طعمين)',         2, 10, 5, 8, $flavorIds, 0);
-        $this->addMix($p, 'super-mix', 'سوبر مكس (اختر ثلاثة أطعمة)', 3, 15, 5, 8, $flavorIds, 1);
+        $allIds = ['arabian', 'lotus', 'nutella', 'blueberry', 'dondurma-pistachio', 'energy'];
+        $this->addMix($p, 'mix',       'مكس (اختر طعمين)',             2, 10, 5, 8, $allIds, 0);
+        $this->addMix($p, 'super-mix', 'سوبر مكس (اختر ثلاثة أطعمة)', 3, 15, 5, 8, $allIds, 1);
     }
 
     // ─── 12. بان كيك (pancake) — flat-list ───────────────────────────────────
@@ -486,13 +455,13 @@ class ProductSeeder extends Seeder
         $this->addProductAddon($p, 'pk-nutella', 'صوص نوتيلا إضافي', 4, 'toggle', null, 0);
         $this->addProductAddon($p, 'pk-nuts',    'بندق مبشور',        4, 'toggle', null, 1);
 
-        $this->addItem($p, 'نوتيلا',    11, true, false, null, null, 0);
-        $this->addItem($p, 'لوتس',      13, true, false, null, null, 1);
-        $this->addItem($p, 'بيستاشيو', 17, true, true,  null, null, 2);
+        $this->addItem($p, 'nutella',   'نوتيلا',    11, true, false, null, null, 0);
+        $this->addItem($p, 'lotus',     'لوتس',      13, true, false, null, null, 1);
+        $this->addItem($p, 'pistachio', 'بيستاشيو',  17, true, true,  null, null, 2);
 
-        $flavorIds = ['نوتيلا', 'لوتس', 'بيستاشيو'];
-        $this->addMix($p, 'mix',       'مكس (اختر طعمين)',         2, 14, 7, 11, $flavorIds, 0);
-        $this->addMix($p, 'super-mix', 'سوبر مكس (اختر ثلاثة أطعمة)', 3, 18, 6, 10, $flavorIds, 1);
+        $ids = ['nutella', 'lotus', 'pistachio'];
+        $this->addMix($p, 'mix',       'مكس (اختر طعمين)',             2, 14, 7, 11, $ids, 0);
+        $this->addMix($p, 'super-mix', 'سوبر مكس (اختر ثلاثة أطعمة)', 3, 18, 6, 10, $ids, 1);
     }
 
     // ─── 13. وافل (waffle) — flat-list ───────────────────────────────────────
@@ -512,13 +481,13 @@ class ProductSeeder extends Seeder
             'has_notes'     => true,
         ]);
 
-        $this->addItem($p, 'نوتيلا',    10, true, false, null, null, 0);
-        $this->addItem($p, 'لوتس',      12, true, false, null, null, 1);
-        $this->addItem($p, 'بيستاشيو', 14, true, true,  null, null, 2);
+        $this->addItem($p, 'nutella',   'نوتيلا',    10, true, false, null, null, 0);
+        $this->addItem($p, 'lotus',     'لوتس',      12, true, false, null, null, 1);
+        $this->addItem($p, 'pistachio', 'بيستاشيو',  14, true, true,  null, null, 2);
 
-        $flavorIds = ['نوتيلا', 'لوتس', 'بيستاشيو'];
-        $this->addMix($p, 'mix',       'مكس (اختر طعمين)',         2, 14, 7, 11, $flavorIds, 0);
-        $this->addMix($p, 'super-mix', 'سوبر مكس (اختر ثلاثة أطعمة)', 3, 15, 5, 9,  $flavorIds, 1);
+        $ids = ['nutella', 'lotus', 'pistachio'];
+        $this->addMix($p, 'mix',       'مكس (اختر طعمين)',             2, 14, 7, 11, $ids, 0);
+        $this->addMix($p, 'super-mix', 'سوبر مكس (اختر ثلاثة أطعمة)', 3, 15, 5, 9,  $ids, 1);
     }
 
     // ─── 14. كريب (crepe) — flat-list ────────────────────────────────────────
@@ -538,13 +507,13 @@ class ProductSeeder extends Seeder
             'has_notes'     => true,
         ]);
 
-        $this->addItem($p, 'نوتيلا',    9,  true, false, null, null, 0);
-        $this->addItem($p, 'لوتس',      11, true, false, null, null, 1);
-        $this->addItem($p, 'بيستاشيو', 13, true, true,  null, null, 2);
+        $this->addItem($p, 'nutella',   'نوتيلا',    9,  true, false, null, null, 0);
+        $this->addItem($p, 'lotus',     'لوتس',      11, true, false, null, null, 1);
+        $this->addItem($p, 'pistachio', 'بيستاشيو',  13, true, true,  null, null, 2);
 
-        $flavorIds = ['نوتيلا', 'لوتس', 'بيستاشيو'];
-        $this->addMix($p, 'mix',       'مكس (اختر طعمين)',         2, 12, 6, 10, $flavorIds, 0);
-        $this->addMix($p, 'super-mix', 'سوبر مكس (اختر ثلاثة أطعمة)', 3, 15, 5, 9,  $flavorIds, 1);
+        $ids = ['nutella', 'lotus', 'pistachio'];
+        $this->addMix($p, 'mix',       'مكس (اختر طعمين)',             2, 12, 6, 10, $ids, 0);
+        $this->addMix($p, 'super-mix', 'سوبر مكس (اختر ثلاثة أطعمة)', 3, 15, 5, 9,  $ids, 1);
     }
 
     // ─── 15. بيتزا جلاسيه (pizza) — flat-list ────────────────────────────────
@@ -564,13 +533,13 @@ class ProductSeeder extends Seeder
             'has_notes'     => true,
         ]);
 
-        $this->addItem($p, 'نوتيلا',    12, true, false, null, null, 0);
-        $this->addItem($p, 'لوتس',      14, true, false, null, null, 1);
-        $this->addItem($p, 'بيستاشيو', 16, true, true,  null, null, 2);
+        $this->addItem($p, 'nutella',   'نوتيلا',    12, true, false, null, null, 0);
+        $this->addItem($p, 'lotus',     'لوتس',      14, true, false, null, null, 1);
+        $this->addItem($p, 'pistachio', 'بيستاشيو',  16, true, true,  null, null, 2);
 
-        $flavorIds = ['نوتيلا', 'لوتس', 'بيستاشيو'];
-        $this->addMix($p, 'mix',       'مكس (اختر طعمين)',         2, 16, 8, 12, $flavorIds, 0);
-        $this->addMix($p, 'super-mix', 'سوبر مكس (اختر ثلاثة أطعمة)', 3, 18, 6, 10, $flavorIds, 1);
+        $ids = ['nutella', 'lotus', 'pistachio'];
+        $this->addMix($p, 'mix',       'مكس (اختر طعمين)',             2, 16, 8, 12, $ids, 0);
+        $this->addMix($p, 'super-mix', 'سوبر مكس (اختر ثلاثة أطعمة)', 3, 18, 6, 10, $ids, 1);
     }
 
     // ─── 16. مولتن كيك (molten) — flat-list ──────────────────────────────────
@@ -589,9 +558,9 @@ class ProductSeeder extends Seeder
             'has_notes'     => true,
         ]);
 
-        $this->addItem($p, 'نوتيلا',   8,  true, false, 'كيك شوكولاتة دافئ بقلب سائل مع بوظة فانيلا', null, 0);
-        $this->addItem($p, 'لوتس',     12, true, false, 'كيك شوكولاتة دافئ بقلب سائل مع بوظة لوتس',    null, 1);
-        $this->addItem($p, 'بستاشيو',  12, true, false, 'كيك شوكولاتة دافئ بقلب سائل مع بوظة بستاشيو', null, 2);
+        $this->addItem($p, 'nutella',   'نوتيلا',   8,  true, false, 'كيك شوكولاتة دافئ بقلب سائل مع بوظة فانيلا', null, 0);
+        $this->addItem($p, 'lotus',     'لوتس',     12, true, false, 'كيك شوكولاتة دافئ بقلب سائل مع بوظة لوتس',    null, 1);
+        $this->addItem($p, 'pistachio', 'بستاشيو',  12, true, false, 'كيك شوكولاتة دافئ بقلب سائل مع بوظة بستاشيو', null, 2);
     }
 
     // ─── 17. براونيز (brownie) — flat-list ───────────────────────────────────
@@ -609,9 +578,9 @@ class ProductSeeder extends Seeder
             'has_image_zoom'=> true,
         ]);
 
-        $this->addItem($p, 'براونيز عادي',   8,  true, false, null, null, 0);
-        $this->addItem($p, 'براونيز نوتيلا', 10, true, false, null, null, 1);
-        $this->addItem($p, 'براونيز لوتس',   10, true, false, null, null, 2);
+        $this->addItem($p, 'plain',   'براونيز عادي',   8,  true, false, null, null, 0);
+        $this->addItem($p, 'nutella', 'براونيز نوتيلا', 10, true, false, null, null, 1);
+        $this->addItem($p, 'lotus',   'براونيز لوتس',   10, true, false, null, null, 2);
     }
 
     // ─── 18. كوكيز (cookies) — flat-list ─────────────────────────────────────
@@ -629,10 +598,10 @@ class ProductSeeder extends Seeder
             'has_image_zoom'=> true,
         ]);
 
-        $this->addItem($p, 'كوكيز نوتيلا',   8,  true, false, null, null, 0);
-        $this->addItem($p, 'كوكيز لوتس',      10, true, false, null, null, 1);
-        $this->addItem($p, 'كوكيز بيستاشيو', 12, true, false, null, null, 2);
-        $this->addItem($p, 'كوكيز مكس',       10, true, false, null, null, 3);
+        $this->addItem($p, 'nutella',   'كوكيز نوتيلا',   8,  true, false, null, null, 0);
+        $this->addItem($p, 'lotus',     'كوكيز لوتس',      10, true, false, null, null, 1);
+        $this->addItem($p, 'pistachio', 'كوكيز بيستاشيو', 12, true, false, null, null, 2);
+        $this->addItem($p, 'mix',       'كوكيز مكس',       10, true, false, null, null, 3);
     }
 
     // ─── 19. تشيز كيك (cheesecake) — flat-list ───────────────────────────────
@@ -650,9 +619,9 @@ class ProductSeeder extends Seeder
             'has_image_zoom'=> true,
         ]);
 
-        $this->addItem($p, 'تشيز كيك فراولة',   12, true, false, null, null, 0);
-        $this->addItem($p, 'تشيز كيك لوتس',      14, true, false, null, null, 1);
-        $this->addItem($p, 'تشيز كيك بيستاشيو', 16, true, false, null, null, 2);
-        $this->addItem($p, 'تشيز كيك مكس',       14, true, false, null, null, 3);
+        $this->addItem($p, 'strawberry', 'تشيز كيك فراولة',   12, true, false, null, null, 0);
+        $this->addItem($p, 'lotus',      'تشيز كيك لوتس',      14, true, false, null, null, 1);
+        $this->addItem($p, 'pistachio',  'تشيز كيك بيستاشيو', 16, true, false, null, null, 2);
+        $this->addItem($p, 'mix',        'تشيز كيك مكس',       14, true, false, null, null, 3);
     }
 }

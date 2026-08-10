@@ -10,7 +10,11 @@ class ProductSize extends Model
 {
     protected $fillable = [
         'product_id', 'container_slug', 'slug', 'label',
-        'max_balls', 'sort_order',
+        'max_balls', 'available', 'sort_order',
+    ];
+
+    protected $casts = [
+        'available' => 'boolean',
     ];
 
     public function product(): BelongsTo
