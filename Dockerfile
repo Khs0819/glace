@@ -70,7 +70,7 @@ RUN chown -R www-data:www-data \
     /var/www/html/storage \
     /var/www/html/bootstrap/cache
 
-# إعادة التأكد من صلاحيات Nginx بعد نسخ الإعدادات
+# التأكد من صلاحيات Nginx
 RUN chown -R www-data:www-data /var/lib/nginx \
     && chmod -R 755 /var/lib/nginx
 
