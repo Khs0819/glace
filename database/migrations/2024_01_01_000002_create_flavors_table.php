@@ -12,7 +12,7 @@ return new class extends Migration
             $table->string('id')->primary(); // slug e.g. "pistachio"
             $table->string('name_ar');
             $table->string('name_en');
-            $table->string('image');
+            $table->string('image')->nullable();
             $table->string('family'); // classic|special|stevia
             $table->boolean('available')->default(true);
             $table->boolean('is_premium_mix_flavor')->default(false);

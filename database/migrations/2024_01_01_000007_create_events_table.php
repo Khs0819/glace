@@ -13,7 +13,7 @@ return new class extends Migration
             $table->string('title');
             $table->string('date', 20); // stored as "DD/MM/YYYY" as per spec
             $table->text('description');
-            $table->string('list_image'); // card thumbnail URL
+            $table->string('list_image')->nullable(); // card thumbnail URL
             $table->timestamps();
         });
     }

@@ -13,7 +13,7 @@ return new class extends Migration
             $table->id();
             $table->string('title');
             $table->json('paragraphs'); // array of strings
-            $table->string('image');
+            $table->string('image')->nullable();
             $table->string('cta_label');
             $table->string('cta_href');
             $table->timestamps();
