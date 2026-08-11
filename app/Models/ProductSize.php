@@ -10,7 +10,7 @@ class ProductSize extends Model
 {
     protected $fillable = [
         'product_id', 'container_slug', 'slug', 'label',
-        'max_balls', 'available', 'sort_order',
+        'max_balls', 'image', 'available', 'sort_order',
     ];
 
     protected $casts = [

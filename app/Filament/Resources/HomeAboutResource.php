@@ -73,22 +73,6 @@ class HomeAboutResource extends Resource
         ]);
     }
 
-    protected function mutateFormDataBeforeFill(array $data): array
-    {
-        if (isset($data['paragraphs']) && is_array($data['paragraphs'])) {
-            $data['paragraphs'] = array_map(fn ($p) => is_string($p) ? ['text' => $p] : $p, $data['paragraphs']);
-        }
-        return $data;
-    }
-
-    protected function mutateFormDataBeforeSave(array $data): array
-    {
-        if (isset($data['paragraphs']) && is_array($data['paragraphs'])) {
-            $data['paragraphs'] = array_values(array_map(fn ($p) => is_array($p) ? ($p['text'] ?? '') : $p, $data['paragraphs']));
-        }
-        return $data;
-    }
-
     public static function table(Table $table): Table
     {
         return $table

@@ -191,6 +191,9 @@ class ProductSeeder extends Seeder
         $this->addSize($p, 'plastic-one',  '1 لتر',   12, ['classic' => 28, 'special' => 35, 'mix' => 32], 'plastic', 1);
         $this->addSize($p, 'foam-half',    '1/2 لتر', 8,  ['classic' => 16, 'special' => 20, 'mix' => 18], 'foam',    2);
         $this->addSize($p, 'foam-one',     '1 لتر',   12, ['classic' => 31, 'special' => 38, 'mix' => 35], 'foam',    3);
+
+        // Attach all 23 global flavors (was missing — caused empty flavors step on /menu/order/family)
+        $p->flavors()->sync(Flavor::pluck('id'));
     }
 
     // ─── 3. براد (brad) — builder (no ball picking) ───────────────────────────

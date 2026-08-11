@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\MediaUrl;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -15,13 +16,13 @@ class ProductResource extends JsonResource
             'categoryId'   => $this->category_id,
             'kind'         => $this->kind,
             'name'         => $this->name,
-            'image'        => $this->image,
+            'image'        => MediaUrl::resolve($this->image),
             'sortOrder'    => $this->sort_order,
-            'available'    => $this->available,
-            'hasNotes'     => $this->has_notes,
-            'hasFavorites' => $this->has_favorites,
-            'hasImageZoom' => $this->has_image_zoom,
-            'inStoreOnly'  => $this->in_store_only,
+            'available'    => (bool) $this->available,
+            'hasNotes'     => (bool) $this->has_notes,
+            'hasFavorites' => (bool) $this->has_favorites,
+            'hasImageZoom' => (bool) $this->has_image_zoom,
+            'inStoreOnly'  => (bool) $this->in_store_only,
         ];
 
         if ($this->description) {
@@ -42,31 +43,38 @@ class ProductResource extends JsonResource
     private function builderFields(): array
     {
         $fields = [
-            'hasExtraBiscuitAddon' => $this->has_extra_biscuit_addon,
-            'includesIceCreamStep' => $this->includes_ice_cream_step,
+            'hasExtraBiscuitAddon' => (bool) $this->has_extra_biscuit_addon,
+            'includesIceCreamStep' => (bool) $this->includes_ice_cream_step,
         ];
 
-        // Only emit selectionMode and flavorFamilies when non-null/non-empty (brad has neither)
         if ($this->selection_mode) {
             $fields['selectionMode'] = $this->selection_mode;
         }
         if (!empty($this->flavor_families)) {
             $fields['flavorFamilies'] = $this->flavor_families;
         }
-
         if ($this->pricing_label) {
             $fields['pricingLabel'] = $this->pricing_label;
         }
 
         if ($this->relationLoaded('containers') && $this->containers->isNotEmpty()) {
-            $fields['containerOptions'] = $this->containers->map(fn ($c) => array_filter([
-                'id'           => $c->slug,
-                'label'        => $c->label,
-                'available'    => $c->available,
-                'name'         => $c->name,
-                'image'        => $c->image,
-                'pricingLabel' => $c->pricing_label,
-            ], fn ($v) => $v !== null))->values();
+            $fields['containerOptions'] = $this->containers->map(function ($c) {
+                $option = [
+                    'id'        => $c->slug,
+                    'label'     => $c->label,
+                    'available' => (bool) $c->available,
+                ];
+                if ($c->name) {
+                    $option['name'] = $c->name;
+                }
+                if ($url = MediaUrl::resolve($c->image)) {
+                    $option['image'] = $url;
+                }
+                if ($c->pricing_label) {
+                    $option['pricingLabel'] = $c->pricing_label;
+                }
+                return $option;
+            })->values();
         }
 
         if ($this->relationLoaded('sizes')) {
@@ -75,7 +83,7 @@ class ProductResource extends JsonResource
                     'id'        => $size->slug,
                     'label'     => $size->label,
                     'maxBalls'  => $size->max_balls,
-                    'available' => $size->available,
+                    'available' => (bool) $size->available,
                     'prices'    => $size->prices->map(fn ($p) => [
                         'flavorFamily' => $p->flavor_family,
                         'price'        => $p->price,
@@ -83,6 +91,9 @@ class ProductResource extends JsonResource
                 ];
                 if ($size->container_slug) {
                     $s['containerId'] = $size->container_slug;
+                }
+                if ($url = MediaUrl::resolve($size->image)) {
+                    $s['image'] = $url;
                 }
                 return $s;
             })->values();
@@ -95,7 +106,6 @@ class ProductResource extends JsonResource
             ])->values();
         }
 
-        // flavors[] only on detail (show) endpoint — not on list
         if ($this->relationLoaded('flavors') && $this->flavors->isNotEmpty()) {
             $fields['flavors'] = FlavorResource::collection($this->flavors);
         }
@@ -113,13 +123,11 @@ class ProductResource extends JsonResource
                     'id'        => $item->slug,
                     'label'     => $item->label,
                     'price'     => $item->price,
-                    'available' => $item->available,
+                    'available' => (bool) $item->available,
+                    'image'     => MediaUrl::resolve($item->image),
                 ];
                 if ($item->description) {
                     $i['description'] = $item->description;
-                }
-                if ($item->image) {
-                    $i['image'] = $item->image;
                 }
                 if ($item->is_premium_mix_flavor) {
                     $i['isPremiumMixFlavor'] = true;
@@ -129,16 +137,18 @@ class ProductResource extends JsonResource
         }
 
         if ($this->relationLoaded('mixes') && $this->mixes->isNotEmpty()) {
-            $fields['mixes'] = $this->mixes->map(fn ($m) => array_filter([
-                'id'                 => $m->slug,
-                'label'              => $m->label,
-                'available'          => $m->available,
-                'pick'               => $m->pick,
-                'basePrice'          => $m->base_price,
-                'flavorPrice'        => $m->flavor_price,
-                'premiumFlavorPrice' => $m->premium_flavor_price,
-                'itemIds'            => $m->item_ids,
-            ], fn ($v) => $v !== null))->values();
+            $fields['mixes'] = $this->mixes->map(function ($m) {
+                return [
+                    'id'                 => $m->slug,
+                    'label'              => $m->label,
+                    'available'          => (bool) $m->available,
+                    'pick'               => $m->pick,
+                    'basePrice'          => $m->base_price,
+                    'flavorPrice'        => $m->flavor_price,
+                    'premiumFlavorPrice' => $m->premium_flavor_price,
+                    'itemIds'            => $m->item_ids ?? [],
+                ];
+            })->values();
         }
 
         return $fields;

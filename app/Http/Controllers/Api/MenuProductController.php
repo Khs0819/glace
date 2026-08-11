@@ -8,11 +8,20 @@ use App\Models\Product;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Validation\ValidationException;
 
 class MenuProductController extends Controller
 {
     public function index(Request $request): AnonymousResourceCollection
     {
+        $unknown = array_diff(array_keys($request->query()), ['category']);
+        if (! empty($unknown)) {
+            throw ValidationException::withMessages([
+                'query' => 'Unknown query parameter(s): ' . implode(', ', $unknown)
+                    . '. The only accepted filter is "category".',
+            ]);
+        }
+
         $query = Product::with([
             'containers',
             'sizes.prices',

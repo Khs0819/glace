@@ -8,6 +8,7 @@ use App\Models\Event;
 use App\Models\HeroSlide;
 use App\Models\HomeAbout;
 use App\Models\HomeWhyGlace;
+use App\Support\MediaUrl;
 use Illuminate\Http\JsonResponse;
 
 class HomeController extends Controller
@@ -18,14 +19,14 @@ class HomeController extends Controller
         $about    = HomeAbout::first();
         $why      = HomeWhyGlace::first();
         $branches = Branch::orderBy('sort_order')->get();
-        $events   = Event::with('images')->latest('id')->take(3)->get();
+        $events   = Event::with('images')->latest('id')->take(10)->get();
 
         return response()->json([
             'hero' => [
                 'slides' => $slides->map(fn ($s) => [
-                    'manImg'        => $s->man_img,
-                    'pieceImg'      => $s->piece_img,
-                    'zigzagsImg'    => $s->zigzags_img,
+                    'manImg'        => MediaUrl::resolve($s->man_img),
+                    'pieceImg'      => MediaUrl::resolve($s->piece_img),
+                    'zigzagsImg'    => MediaUrl::resolve($s->zigzags_img),
                     'titleH1'       => $s->title_h1,
                     'titleH2'       => $s->title_h2,
                     'bgColor'       => $s->bg_color,
@@ -36,17 +37,17 @@ class HomeController extends Controller
             ],
             'about' => $about ? [
                 'title'      => $about->title,
-                'paragraphs' => $about->paragraphs,
-                'image'      => $about->image,
+                'paragraphs' => $this->normalizeParagraphs($about->paragraphs),
+                'image'      => MediaUrl::resolve($about->image),
                 'ctaLabel'   => $about->cta_label,
                 'ctaHref'    => $about->cta_href,
             ] : null,
             'whyGlace' => $why ? [
                 'title'          => $why->title,
                 'description'    => $why->description,
-                'features'       => $why->features,
+                'features'       => $this->normalizeWhyFeatures($why->features),
                 'videoUrl'       => $why->video_url,
-                'videoThumbnail' => $why->video_thumbnail,
+                'videoThumbnail' => MediaUrl::resolve($why->video_thumbnail),
             ] : null,
             'branches' => [
                 'title'    => 'ننتظركم في المواعيد التالية',
@@ -69,10 +70,37 @@ class HomeController extends Controller
                 'items'     => $events->map(fn ($e) => [
                     'id'    => $e->id,
                     'title' => $e->title,
-                    'image' => $e->list_image,
+                    'image' => MediaUrl::resolve($e->list_image),
                     'href'  => '/events/' . $e->id,
                 ]),
             ],
         ]);
+    }
+
+    private function normalizeParagraphs(mixed $paragraphs): array
+    {
+        if (! is_array($paragraphs)) {
+            return [];
+        }
+
+        return array_values(array_map(
+            fn ($p) => is_array($p) ? (string) ($p['text'] ?? '') : (string) $p,
+            $paragraphs,
+        ));
+    }
+
+    private function normalizeWhyFeatures(mixed $features): array
+    {
+        if (! is_array($features)) {
+            return [];
+        }
+
+        return array_values(array_map(function ($f) {
+            if (! is_array($f)) {
+                return $f;
+            }
+            unset($f['image']);
+            return $f;
+        }, $features));
     }
 }

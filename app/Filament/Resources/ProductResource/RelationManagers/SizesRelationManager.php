@@ -38,6 +38,14 @@ class SizesRelationManager extends RelationManager
                     ->maxLength(100)
                     ->placeholder('اتركه فارغاً إذا ينطبق على جميع الحاويات')
                     ->helperText('مثال: cup · biscuit'),
+                Forms\Components\FileUpload::make('image')
+                    ->label('صورة الحجم')
+                    ->image()
+                    ->disk('public')
+                    ->directory('sizes')
+                    ->imagePreviewHeight('100')
+                    ->maxSize(2048)
+                    ->helperText('اختياري — يظهر بجانب صف الحجم في العائلي'),
                 Forms\Components\Toggle::make('available')
                     ->label('متوفر')
                     ->default(true)
