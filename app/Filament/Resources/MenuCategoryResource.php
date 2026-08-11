@@ -51,6 +51,15 @@ class MenuCategoryResource extends Resource
                         ->required()
                         ->inline()
                         ->columnSpanFull(),
+                    Forms\Components\FileUpload::make('image')
+                        ->label('صورة الفئة')
+                        ->image()
+                        ->disk('public')
+                        ->directory('categories')
+                        ->imagePreviewHeight('120')
+                        ->maxSize(2048)
+                        ->helperText('اختياري — تظهر بجانب اسم الفئة في القائمة')
+                        ->columnSpanFull(),
                     Forms\Components\TextInput::make('sort_order')
                         ->label('الترتيب في القائمة')
                         ->numeric()
@@ -86,6 +95,11 @@ class MenuCategoryResource extends Resource
     {
         return $table
             ->columns([
+                Tables\Columns\ImageColumn::make('image')
+                    ->label('صورة')
+                    ->disk('public')
+                    ->size(48)
+                    ->defaultImageUrl('https://placehold.co/48x48/f59e0b/ffffff?text=🍦'),
                 Tables\Columns\TextColumn::make('id')
                     ->label('Slug')
                     ->badge()

@@ -12,7 +12,7 @@ class MenuCategory extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
-        'id', 'label', 'icon', 'accent_color',
+        'id', 'label', 'icon', 'image', 'accent_color',
         'gradient_from', 'gradient_to', 'sort_order', 'available',
     ];
 
