@@ -151,6 +151,27 @@ it('shows the variants tab only for flat-list products', function () {
         ->and(ItemsRelationManager::canViewForRecord(CatalogFactory::builder(), EditProduct::class))->toBeFalse();
 });
 
+it('assigns one uploaded image to several variants at once', function () {
+    fakePublicDisk();
+
+    $a = CatalogFactory::item($this->product, 'a', ['image' => null]);
+    $b = CatalogFactory::item($this->product, 'b', ['image' => null]);
+
+    itemsManager($this->product)
+        ->callTableBulkAction('set_image', [$a, $b], data: [
+            'image' => [UploadedFile::fake()->image('shared.png')],
+        ])
+        ->assertHasNoTableBulkActionErrors();
+
+    expect($a->refresh()->image)->not->toBeNull()
+        ->and($b->refresh()->image)->toBe($a->image);
+
+    Storage::disk('public')->assertExists($a->image);
+
+    $images = collect($this->getJson('/api/menu/products/pancake')->json('items'))->pluck('image');
+    expect($images->filter())->toHaveCount(2);
+});
+
 it('flags how many variants still need an image', function () {
     CatalogFactory::item($this->product, 'with-image', ['image' => 'items/a.png']);
     CatalogFactory::item($this->product, 'without-image', ['image' => null]);

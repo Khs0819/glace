@@ -253,7 +253,12 @@ class ProductResource extends Resource
             ]);
     }
 
-    public static function getRelationManagers(): array
+    /**
+     * Filament reads relation managers from getRelations() — a differently named
+     * method is silently ignored, which is why the أصناف / مكسات / أنواع / أحجام
+     * panels never appeared on the edit screen (handoff tickets 01 · 05 · 07).
+     */
+    public static function getRelations(): array
     {
         return [
             RelationManagers\ItemsRelationManager::class,

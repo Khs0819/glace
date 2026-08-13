@@ -136,7 +136,8 @@ class EventResource extends Resource
             ])]);
     }
 
-    public static function getRelationManagers(): array
+    /** Filament reads relation managers from getRelations() (handoff ticket 04). */
+    public static function getRelations(): array
     {
         return [
             RelationManagers\EventImagesRelationManager::class,

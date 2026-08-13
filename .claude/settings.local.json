@@ -11,7 +11,8 @@
       "Bash(grep -n 'getValidationRules\\\\|rules\\\\[\\\\]\\\\|foreach \\($this->rules' vendor/filament/forms/src/Components/Concerns/CanBeValidated.php)",
       "Bash(echo \"=== EXIT: $? ===\")",
       "Bash(php /c/Users/AL-Qema/AppData/Local/Temp/claude/C--laragon-www-glace/dcda8ee9-a9fd-4bc9-82f8-5316a8c92250/scratchpad/fill_media.php)",
-      "Bash(vendor/bin/pint --test)"
+      "Bash(vendor/bin/pint --test)",
+      "Bash(xargs grep -ln \"function getRelationManagers\")"
     ]
   }
 }

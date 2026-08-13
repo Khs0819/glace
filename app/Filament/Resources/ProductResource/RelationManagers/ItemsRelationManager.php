@@ -148,6 +148,24 @@ class ItemsRelationManager extends RelationManager
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
+                    // items[].image is required on all 69 variants (handoff 01);
+                    // one upload applied to a selection makes that practical.
+                    Tables\Actions\BulkAction::make('set_image')
+                        ->label('تعيين صورة للمحدد')
+                        ->icon('heroicon-o-photo')
+                        ->color('primary')
+                        ->form([
+                            Forms\Components\FileUpload::make('image')
+                                ->label('الصورة')
+                                ->image()
+                                ->disk('public')
+                                ->directory('items')
+                                ->imagePreviewHeight('120')
+                                ->maxSize(2048)
+                                ->required(),
+                        ])
+                        ->action(fn ($records, array $data) => $records->each->update(['image' => $data['image']]))
+                        ->deselectRecordsAfterCompletion(),
                     Tables\Actions\BulkAction::make('enable')
                         ->label('تفعيل المحدد')
                         ->icon('heroicon-o-eye')
