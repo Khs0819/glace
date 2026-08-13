@@ -8,11 +8,19 @@ use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Validation\Rules\Unique;
 
 class ContainersRelationManager extends RelationManager
 {
     protected static string $relationship = 'containers';
-    protected static ?string $title = 'الحاويات (Builder)';
+    protected static ?string $title = 'الأنواع / الحاويات (Builder)';
+
+    /** Containers belong to builder products only (swagger: IBuilderProduct.containerOptions). */
+    public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
+    {
+        return $ownerRecord->kind === 'builder';
+    }
 
     public function form(Form $form): Form
     {
@@ -22,7 +30,12 @@ class ContainersRelationManager extends RelationManager
                     ->label('المعرف')
                     ->required()
                     ->maxLength(100)
-                    ->helperText('مثال: cup · biscuit · plastic'),
+                    ->alphaDash()
+                    // Sizes bind to a container by this id (ISizeOption.containerId).
+                    ->disabled(fn (?ProductContainer $record) => $record !== null)
+                    ->dehydrated()
+                    ->unique(ignoreRecord: true, modifyRuleUsing: fn (Unique $rule) => $rule->where('product_id', $this->getOwnerRecord()->getKey()))
+                    ->helperText('ثابت بعد الإنشاء — مثال: cup · biscuit · plastic'),
                 Forms\Components\TextInput::make('label')
                     ->label('الاسم المختصر')
                     ->required()
@@ -63,6 +76,12 @@ class ContainersRelationManager extends RelationManager
     {
         return $table
             ->columns([
+                Tables\Columns\ImageColumn::make('image')
+                    ->label('الصورة')
+                    ->disk('public')
+                    ->square()
+                    ->size(48)
+                    ->defaultImageUrl('https://placehold.co/48x48/e2e8f0/64748b?text=%E2%80%94'),
                 Tables\Columns\TextColumn::make('slug')
                     ->label('المعرف')
                     ->badge()

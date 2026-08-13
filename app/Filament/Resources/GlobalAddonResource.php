@@ -10,6 +10,7 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Validation\Rules\Unique;
 
 class GlobalAddonResource extends Resource
 {
@@ -35,7 +36,12 @@ class GlobalAddonResource extends Resource
                     ->label('المعرف')
                     ->required()
                     ->maxLength(100)
-                    ->helperText('مثال: extra-caramel · extra-biscuit'),
+                    ->alphaDash()
+                    // GET /menu/addons must never expose a duplicate id (handoff 08 §ب-5).
+                    // A composite DB index cannot enforce this because MySQL treats
+                    // each NULL product_id as distinct, so validate it here too.
+                    ->unique(ignoreRecord: true, modifyRuleUsing: fn (Unique $rule) => $rule->whereNull('product_id'))
+                    ->helperText('فريد داخل الإضافات المشتركة — مثال: extra-caramel · extra-biscuit'),
                 Forms\Components\TextInput::make('label')
                     ->label('الاسم')
                     ->required()

@@ -2,16 +2,27 @@
 
 namespace App\Filament\Resources\ProductResource\RelationManagers;
 
+use App\Models\Product;
+use App\Models\ProductMix;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Unique;
 
 class MixesRelationManager extends RelationManager
 {
     protected static string $relationship = 'mixes';
     protected static ?string $title = 'قواعد المكس (Flat-List)';
+
+    /** Mixes belong to flat-list products only (swagger: IFlatListProduct.mixes). */
+    public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
+    {
+        return $ownerRecord->kind === 'flat-list';
+    }
 
     public function form(Form $form): Form
     {
@@ -21,7 +32,12 @@ class MixesRelationManager extends RelationManager
                     ->label('المعرف')
                     ->required()
                     ->maxLength(100)
-                    ->helperText('مثال: mix · super-mix'),
+                    ->alphaDash()
+                    // Orders reference the mix by this id — stable after creation (handoff 07).
+                    ->disabled(fn (?ProductMix $record) => $record !== null)
+                    ->dehydrated()
+                    ->unique(ignoreRecord: true, modifyRuleUsing: fn (Unique $rule) => $rule->where('product_id', $this->getOwnerRecord()->getKey()))
+                    ->helperText('مثال: mix · super-mix — ثابت بعد الإنشاء'),
                 Forms\Components\TextInput::make('label')
                     ->label('الاسم')
                     ->required()
@@ -68,14 +84,46 @@ class MixesRelationManager extends RelationManager
                 ])->columns(3),
 
             Forms\Components\Section::make('عناصر المكس')
-                ->description('أدخل معرف كل عنصر (items[].id) واضغط Enter — مثال: nutella · lotus · pistachio')
+                ->description('اختر أصناف هذا المنتج المسموح اختيارها داخل المكس — القائمة مقيّدة بأصناف نفس المنتج فقط (handoff 07)')
                 ->schema([
-                    Forms\Components\TagsInput::make('item_ids')
+                    Forms\Components\Select::make('item_ids')
                         ->label('')
-                        ->separator(',')
-                        ->placeholder('اكتب معرف العنصر ثم اضغط Enter'),
+                        ->multiple()
+                        ->required()
+                        ->searchable()
+                        ->preload()
+                        ->options(fn () => $this->itemOptions())
+                        // A Select validates nothing per-entry on its own: without this
+                        // an id that was renamed or belongs to another product would be
+                        // stored and the storefront would render a dead mix entry.
+                        ->nestedRecursiveRules([
+                            fn () => Rule::in(array_keys($this->itemOptions())),
+                        ])
+                        ->validationMessages(['*.in' => 'صنف غير موجود في هذا المنتج.'])
+                        ->helperText('النجمة ★ = صنف Premium يُسعّر بـ premiumFlavorPrice')
+                        ->placeholder('اختر صنفاً أو أكثر'),
                 ]),
         ]);
+    }
+
+    /**
+     * itemIds may only reference items[].id on the SAME product (handoff 07 /
+     * swagger IMixRule.itemIds) — never flavor ids and never Arabic labels.
+     *
+     * @return array<string, string>
+     */
+    private function itemOptions(): array
+    {
+        /** @var Product $product */
+        $product = $this->getOwnerRecord();
+
+        return $product->items()
+            ->orderBy('id')
+            ->get()
+            ->mapWithKeys(fn ($item) => [
+                $item->slug => $item->label . ' — ' . $item->slug . ($item->is_premium_mix_flavor ? ' ★' : ''),
+            ])
+            ->all();
     }
 
     public function table(Table $table): Table
@@ -106,12 +154,25 @@ class MixesRelationManager extends RelationManager
                 Tables\Columns\TextColumn::make('premium_flavor_price')
                     ->label('المميزة')
                     ->suffix(' ₪'),
+                Tables\Columns\TextColumn::make('item_ids')
+                    ->label('الأصناف')
+                    ->badge()
+                    ->color('info')
+                    ->limitList(3)
+                    ->expandableLimitedList()
+                    ->placeholder('—'),
             ])
             ->defaultSort('sort_order')
+            ->reorderable('sort_order')
+            ->filters([
+                Tables\Filters\TernaryFilter::make('available')->label('الحالة'),
+            ])
             ->headerActions([Tables\Actions\CreateAction::make()->label('إضافة مكس')])
             ->actions([
                 Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\DeleteAction::make()
+                    ->requiresConfirmation()
+                    ->modalDescription('الطلبات التاريخية قد تشير لهذا المكس بمعرّفه. للإيقاف المؤقت استخدم مفتاح «متاح» بدل الحذف.'),
             ])
             ->emptyStateHeading('لا توجد قواعد مكس')
             ->emptyStateDescription('المكس خاص بمنتجات Flat-List مثل: كنافة، لقيمات، بان كيك...');

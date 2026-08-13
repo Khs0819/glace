@@ -8,11 +8,32 @@ use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Validation\Rules\Unique;
 
 class ItemsRelationManager extends RelationManager
 {
     protected static string $relationship = 'items';
-    protected static ?string $title = 'عناصر القائمة (Flat-List)';
+    protected static ?string $title = 'الأصناف (Flat-List)';
+
+    /** Items belong to flat-list products only (swagger: IFlatListProduct.items). */
+    public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
+    {
+        return $ownerRecord->kind === 'flat-list';
+    }
+
+    public static function getBadge(Model $ownerRecord, string $pageClass): ?string
+    {
+        $missing = $ownerRecord->items()->whereNull('image')->count();
+
+        return $missing > 0 ? $missing . ' بلا صورة' : null;
+    }
+
+    public static function getBadgeColor(Model $ownerRecord, string $pageClass): ?string
+    {
+        return 'warning';
+    }
 
     public function form(Form $form): Form
     {
@@ -22,7 +43,13 @@ class ItemsRelationManager extends RelationManager
                     ->label('المعرف (ID)')
                     ->required()
                     ->maxLength(100)
-                    ->helperText('ثابت لا يتغير — مثال: nutella · lotus · arabic-coffee')
+                    ->alphaDash()
+                    // Mix rules reference items by this id, so it must survive a
+                    // label rename (swagger: IProductVariant.id).
+                    ->disabled(fn (?ProductItem $record) => $record !== null)
+                    ->dehydrated()
+                    ->unique(ignoreRecord: true, modifyRuleUsing: fn (Unique $rule) => $rule->where('product_id', $this->getOwnerRecord()->getKey()))
+                    ->helperText('ثابت لا يتغير بعد الإنشاء — مثال: nutella · lotus · arabic-coffee')
                     ->columnSpanFull(),
                 Forms\Components\TextInput::make('label')
                     ->label('اسم العنصر')
@@ -40,12 +67,13 @@ class ItemsRelationManager extends RelationManager
                     ->maxLength(500)
                     ->columnSpanFull(),
                 Forms\Components\FileUpload::make('image')
-                    ->label('صورة العنصر')
+                    ->label('صورة الصنف')
                     ->image()
                     ->disk('public')
                     ->directory('items')
                     ->imagePreviewHeight('100')
-                    ->maxSize(2048),
+                    ->maxSize(2048)
+                    ->helperText('مطلوبة — تظهر بجانب الاسم في صفحة الطلب وداخل مودال المكس'),
                 Forms\Components\TextInput::make('sort_order')
                     ->label('الترتيب')
                     ->numeric()
@@ -68,6 +96,17 @@ class ItemsRelationManager extends RelationManager
     {
         return $table
             ->columns([
+                Tables\Columns\ImageColumn::make('image')
+                    ->label('الصورة')
+                    ->disk('public')
+                    ->square()
+                    ->size(48)
+                    ->defaultImageUrl('https://placehold.co/48x48/e2e8f0/64748b?text=%E2%80%94'),
+                Tables\Columns\TextColumn::make('slug')
+                    ->label('المعرف')
+                    ->badge()
+                    ->color('gray')
+                    ->searchable(),
                 Tables\Columns\TextColumn::make('label')
                     ->label('الاسم')
                     ->searchable()
@@ -92,8 +131,16 @@ class ItemsRelationManager extends RelationManager
             ])
             ->defaultSort('sort_order')
             ->reorderable('sort_order')
+            ->filters([
+                Tables\Filters\TernaryFilter::make('available')->label('التوفّر'),
+                Tables\Filters\TernaryFilter::make('is_premium_mix_flavor')->label('Premium'),
+                Tables\Filters\Filter::make('missing_image')
+                    ->label('بدون صورة فقط')
+                    ->query(fn (Builder $query) => $query->whereNull('image'))
+                    ->toggle(),
+            ])
             ->headerActions([
-                Tables\Actions\CreateAction::make()->label('إضافة عنصر'),
+                Tables\Actions\CreateAction::make()->label('إضافة صنف'),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),

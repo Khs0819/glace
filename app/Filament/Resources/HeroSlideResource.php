@@ -20,6 +20,25 @@ class HeroSlideResource extends Resource
     protected static ?string $pluralModelLabel = 'سلايدات الرئيسية';
     protected static ?int $navigationSort = 10;
 
+    /**
+     * `/home` skips slides that are missing any of the three images, because
+     * `ISlideData` requires all of them (handoff 08 §أ-4). Flag those here so
+     * an admin can see why a slide is not on the site.
+     */
+    public static function getNavigationBadge(): ?string
+    {
+        $incomplete = static::getModel()::query()
+            ->where(fn ($q) => $q->whereNull('man_img')->orWhereNull('piece_img')->orWhereNull('zigzags_img'))
+            ->count();
+
+        return $incomplete > 0 ? $incomplete . ' غير مكتمل' : null;
+    }
+
+    public static function getNavigationBadgeColor(): ?string
+    {
+        return 'warning';
+    }
+
     public static function form(Form $form): Form
     {
         return $form->schema([
@@ -93,12 +112,25 @@ class HeroSlideResource extends Resource
     {
         return $table
             ->columns([
+                Tables\Columns\ImageColumn::make('man_img')
+                    ->label('الشخصية')
+                    ->disk('public')
+                    ->square()
+                    ->size(48)
+                    ->defaultImageUrl('https://placehold.co/48x48/e2e8f0/64748b?text=%E2%80%94'),
                 Tables\Columns\ColorColumn::make('bg_color')
                     ->label('اللون')
                     ->width(50),
                 Tables\Columns\TextColumn::make('title_h1')
                     ->label('العنوان الرئيسي')
                     ->weight(\Filament\Support\Enums\FontWeight::SemiBold),
+                Tables\Columns\TextColumn::make('status')
+                    ->label('الحالة')
+                    ->badge()
+                    ->getStateUsing(fn (HeroSlide $record) => $record->man_img && $record->piece_img && $record->zigzags_img
+                        ? 'ظاهر'
+                        : 'مخفي — صور ناقصة')
+                    ->color(fn (string $state) => $state === 'ظاهر' ? 'success' : 'warning'),
                 Tables\Columns\TextColumn::make('title_h2')
                     ->label('العنوان الفرعي')
                     ->limit(50)

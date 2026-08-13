@@ -10,6 +10,7 @@ use App\Models\HomeAbout;
 use App\Models\HomeWhyGlace;
 use App\Support\MediaUrl;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Collection;
 
 class HomeController extends Controller
 {
@@ -23,17 +24,7 @@ class HomeController extends Controller
 
         return response()->json([
             'hero' => [
-                'slides' => $slides->map(fn ($s) => [
-                    'manImg'        => MediaUrl::resolve($s->man_img),
-                    'pieceImg'      => MediaUrl::resolve($s->piece_img),
-                    'zigzagsImg'    => MediaUrl::resolve($s->zigzags_img),
-                    'titleH1'       => $s->title_h1,
-                    'titleH2'       => $s->title_h2,
-                    'bgColor'       => $s->bg_color,
-                    'headerBgColor' => $s->header_bg_color,
-                    'h1BgColor'     => $s->h1_bg_color,
-                    'h2BgColor'     => $s->h2_bg_color,
-                ]),
+                'slides' => $this->renderSlides($slides),
             ],
             'about' => $about ? [
                 'title'      => $about->title,
@@ -67,14 +58,41 @@ class HomeController extends Controller
                 'title'     => 'الفعاليات و المناسبات',
                 'moreLabel' => 'عرض المزيد',
                 'moreHref'  => '/events',
+                // Same source as IEvent.listImage so a card that renders on
+                // /events never renders empty on the home carousel (handoff 04 §3).
                 'items'     => $events->map(fn ($e) => [
                     'id'    => $e->id,
                     'title' => $e->title,
-                    'image' => MediaUrl::resolve($e->list_image),
+                    'image' => $e->cardImageUrl(),
                     'href'  => '/events/' . $e->id,
                 ]),
             ],
         ]);
+    }
+
+    /**
+     * `ISlideData` requires manImg, pieceImg and zigzagsImg. The storefront has no
+     * fallback for a hero slide, so a half-uploaded slide renders as a broken
+     * placeholder. Skip those instead of emitting nulls (handoff 08 §أ-4) —
+     * the admin sees the same slide flagged as incomplete in the dashboard.
+     */
+    private function renderSlides(Collection $slides): array
+    {
+        return $slides
+            ->map(fn ($s) => [
+                'manImg'        => MediaUrl::resolve($s->man_img),
+                'pieceImg'      => MediaUrl::resolve($s->piece_img),
+                'zigzagsImg'    => MediaUrl::resolve($s->zigzags_img),
+                'titleH1'       => $s->title_h1,
+                'titleH2'       => $s->title_h2,
+                'bgColor'       => $s->bg_color,
+                'headerBgColor' => $s->header_bg_color,
+                'h1BgColor'     => $s->h1_bg_color,
+                'h2BgColor'     => $s->h2_bg_color,
+            ])
+            ->filter(fn (array $slide) => $slide['manImg'] && $slide['pieceImg'] && $slide['zigzagsImg'])
+            ->values()
+            ->all();
     }
 
     private function normalizeParagraphs(mixed $paragraphs): array

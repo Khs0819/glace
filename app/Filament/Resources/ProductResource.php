@@ -12,6 +12,7 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class ProductResource extends Resource
 {
@@ -197,6 +198,15 @@ class ProductResource extends Resource
                     ->label('متوفر')
                     ->onColor('success')
                     ->offColor('danger'),
+                // items[].image is required on every variant (handoff 01), so
+                // expose the remaining upload backlog per product.
+                Tables\Columns\TextColumn::make('items_missing_image_count')
+                    ->label('أصناف بلا صورة')
+                    ->counts(['items as items_missing_image_count' => fn (Builder $query) => $query->whereNull('image')])
+                    ->badge()
+                    ->alignCenter()
+                    ->color(fn ($state) => $state > 0 ? 'warning' : 'success')
+                    ->formatStateUsing(fn ($state) => $state > 0 ? $state : '✓'),
                 Tables\Columns\TextColumn::make('sort_order')
                     ->label('#')
                     ->sortable()
@@ -212,6 +222,10 @@ class ProductResource extends Resource
                     ->options(['builder' => 'Builder', 'flat-list' => 'Flat List']),
                 Tables\Filters\TernaryFilter::make('available')
                     ->label('الحالة'),
+                Tables\Filters\Filter::make('items_missing_image')
+                    ->label('فيه أصناف بلا صورة')
+                    ->query(fn (Builder $query) => $query->whereHas('items', fn (Builder $q) => $q->whereNull('image')))
+                    ->toggle(),
             ])
             ->actions([
                 Tables\Actions\EditAction::make()->icon('heroicon-m-pencil-square'),

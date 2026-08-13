@@ -2,16 +2,26 @@
 
 namespace App\Filament\Resources\ProductResource\RelationManagers;
 
+use App\Models\ProductSize;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Unique;
 
 class SizesRelationManager extends RelationManager
 {
     protected static string $relationship = 'sizes';
     protected static ?string $title = 'الأحجام والأسعار (Builder)';
+
+    /** Sizes belong to builder products only (swagger: IBuilderProduct.sizes). */
+    public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
+    {
+        return $ownerRecord->kind === 'builder';
+    }
 
     public function form(Form $form): Form
     {
@@ -21,7 +31,11 @@ class SizesRelationManager extends RelationManager
                     ->label('المعرف')
                     ->required()
                     ->maxLength(100)
-                    ->helperText('مثال: cup-small · cup-medium · brad-large'),
+                    ->alphaDash()
+                    ->disabled(fn (?ProductSize $record) => $record !== null)
+                    ->dehydrated()
+                    ->unique(ignoreRecord: true, modifyRuleUsing: fn (Unique $rule) => $rule->where('product_id', $this->getOwnerRecord()->getKey()))
+                    ->helperText('ثابت بعد الإنشاء — مثال: cup-small · plastic-half'),
                 Forms\Components\TextInput::make('label')
                     ->label('الاسم')
                     ->required()
@@ -33,11 +47,20 @@ class SizesRelationManager extends RelationManager
                     ->default(0)
                     ->minValue(0)
                     ->helperText('0 = لا يوجد picker للنكهات (كالبراد)'),
-                Forms\Components\TextInput::make('container_slug')
-                    ->label('مخصص لحاوية (container_id)')
-                    ->maxLength(100)
-                    ->placeholder('اتركه فارغاً إذا ينطبق على جميع الحاويات')
-                    ->helperText('مثال: cup · biscuit'),
+                // containerId must reference a container of the SAME product
+                // (swagger: ISizeOption.containerId) — a free-text value here
+                // silently detaches the size from its price table.
+                Forms\Components\Select::make('container_slug')
+                    ->label('مخصص لنوع (containerId)')
+                    ->options(fn () => $this->containerOptions())
+                    ->searchable()
+                    ->native(false)
+                    // A Select adds no `in` rule of its own; a stale containerId
+                    // silently detaches the size from its price table.
+                    ->rules([fn () => Rule::in(array_keys($this->containerOptions()))])
+                    ->validationMessages(['in' => 'هذا النوع غير موجود في هذا المنتج.'])
+                    ->placeholder('حجم مشترك — ينطبق على جميع الأنواع')
+                    ->helperText('اتركه فارغاً للأحجام المشتركة (مثل البراد مع بوظة)'),
                 Forms\Components\FileUpload::make('image')
                     ->label('صورة الحجم')
                     ->image()
@@ -89,10 +112,29 @@ class SizesRelationManager extends RelationManager
         ]);
     }
 
+    /** @return array<string, string> */
+    private function containerOptions(): array
+    {
+        return $this->getOwnerRecord()
+            ->containers()
+            ->orderBy('sort_order')
+            ->get()
+            ->mapWithKeys(fn ($container) => [
+                $container->slug => $container->label . ' — ' . $container->slug,
+            ])
+            ->all();
+    }
+
     public function table(Table $table): Table
     {
         return $table
             ->columns([
+                Tables\Columns\ImageColumn::make('image')
+                    ->label('الصورة')
+                    ->disk('public')
+                    ->square()
+                    ->size(48)
+                    ->defaultImageUrl('https://placehold.co/48x48/e2e8f0/64748b?text=%E2%80%94'),
                 Tables\Columns\TextColumn::make('slug')
                     ->label('المعرف')
                     ->badge()
@@ -114,12 +156,14 @@ class SizesRelationManager extends RelationManager
                     ->label('متوفر')
                     ->onColor('success')
                     ->offColor('danger'),
-                Tables\Columns\TextColumn::make('prices_count')
-                    ->label('أسعار مُضافة')
-                    ->counts('prices')
+                Tables\Columns\TextColumn::make('prices')
+                    ->label('الأسعار')
                     ->badge()
                     ->color('success')
-                    ->alignCenter(),
+                    ->getStateUsing(fn (ProductSize $record) => $record->prices
+                        ->map(fn ($price) => $price->flavor_family . ': ' . rtrim(rtrim(number_format($price->price, 2, '.', ''), '0'), '.') . '₪')
+                        ->all())
+                    ->placeholder('لا أسعار'),
                 Tables\Columns\TextColumn::make('sort_order')
                     ->label('#')
                     ->sortable()
@@ -127,6 +171,9 @@ class SizesRelationManager extends RelationManager
             ])
             ->defaultSort('sort_order')
             ->reorderable('sort_order')
+            ->filters([
+                Tables\Filters\TernaryFilter::make('available')->label('التوفّر'),
+            ])
             ->headerActions([Tables\Actions\CreateAction::make()->label('إضافة حجم')])
             ->actions([
                 Tables\Actions\EditAction::make(),

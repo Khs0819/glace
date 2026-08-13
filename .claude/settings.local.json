@@ -1,7 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash(php artisan *)"
+      "Bash(php artisan *)",
+      "Bash(grep -n \"use App\\\\\\\\\\\\\\\\Models\\\\|flavors\\(\\)\" database/seeders/ProductSeeder.php app/Models/Product.php)",
+      "Bash(timeout 25 curl -s -o /dev/null -w \"HTTP %{http_code} in %{time_total}s\\\\n\" \"http://acw348d983gr8x01lb5myd3x.64.176.172.179.sslip.io/api/home\")",
+      "Bash(echo \"UNREACHABLE \\(curl exit $?\\)\")",
+      "Bash(php -r 'try{$p=new PDO\\('\\\\''mysql:host=127.0.0.1;port=3306;dbname=glace'\\\\'','\\\\''root'\\\\'','\\\\'''\\\\''\\);echo '\\\\''DB OK'\\\\''.PHP_EOL;}catch\\(Exception $e\\){echo '\\\\''DB FAIL: '\\\\''.$e->getMessage\\(\\).PHP_EOL;}')",
+      "Bash(php /c/Users/AL-Qema/AppData/Local/Temp/claude/C--laragon-www-glace/dcda8ee9-a9fd-4bc9-82f8-5316a8c92250/scratchpad/api.php /api/menu/products/loqaimat)",
+      "Bash(python -c \"import sys,json; d=sys.stdin.read\\(\\).strip\\(\\); j=json.loads\\(d\\); print\\(json.dumps\\({'slug':j['slug'],'image':j.get\\('image'\\),'items':j.get\\('items'\\),'mixes':j.get\\('mixes'\\)},ensure_ascii=False,indent=1\\)\\)\")",
+      "Bash(grep -n 'getValidationRules\\\\|rules\\\\[\\\\]\\\\|foreach \\($this->rules' vendor/filament/forms/src/Components/Concerns/CanBeValidated.php)",
+      "Bash(echo \"=== EXIT: $? ===\")",
+      "Bash(php /c/Users/AL-Qema/AppData/Local/Temp/claude/C--laragon-www-glace/dcda8ee9-a9fd-4bc9-82f8-5316a8c92250/scratchpad/fill_media.php)",
+      "Bash(vendor/bin/pint --test)"
     ]
   }
 }

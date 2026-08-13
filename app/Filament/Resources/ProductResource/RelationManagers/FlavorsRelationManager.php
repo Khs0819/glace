@@ -8,11 +8,21 @@ use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 class FlavorsRelationManager extends RelationManager
 {
     protected static string $relationship = 'flavors';
     protected static ?string $title = 'نكهات المنتج (Builder)';
+
+    /**
+     * Only builders with a flavor step serve flavors[] (handoff 02).
+     * `brad` has no flavor picker, so it declares no flavor families.
+     */
+    public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
+    {
+        return $ownerRecord->kind === 'builder' && ! empty($ownerRecord->flavor_families);
+    }
 
     public function form(Form $form): Form
     {

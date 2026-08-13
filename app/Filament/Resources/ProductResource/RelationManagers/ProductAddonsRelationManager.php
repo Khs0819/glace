@@ -8,6 +8,7 @@ use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Validation\Rules\Unique;
 
 class ProductAddonsRelationManager extends RelationManager
 {
@@ -20,7 +21,10 @@ class ProductAddonsRelationManager extends RelationManager
             Forms\Components\TextInput::make('slug')
                 ->label('المعرف')
                 ->required()
-                ->maxLength(100),
+                ->maxLength(100)
+                ->alphaDash()
+                ->unique(ignoreRecord: true, modifyRuleUsing: fn (Unique $rule) => $rule->where('product_id', $this->getOwnerRecord()->getKey()))
+                ->helperText('فريد داخل هذا المنتج — مثال: ms-caramel'),
             Forms\Components\TextInput::make('label')
                 ->label('الاسم')
                 ->required()

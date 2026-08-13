@@ -7,11 +7,22 @@ use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Validation\Rules\Unique;
 
 class IceCreamAddonPricesRelationManager extends RelationManager
 {
     protected static string $relationship = 'iceCreamAddonPrices';
     protected static ?string $title = 'أسعار إضافة البوظة (براد مع بوظة)';
+
+    /**
+     * Only the brad-boza flow adds ice cream on top of a size
+     * (swagger: IBuilderProduct.iceCreamAddonPrices, gated by includesIceCreamStep).
+     */
+    public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
+    {
+        return $ownerRecord->kind === 'builder' && (bool) $ownerRecord->includes_ice_cream_step;
+    }
 
     public function form(Form $form): Form
     {
@@ -23,7 +34,9 @@ class IceCreamAddonPricesRelationManager extends RelationManager
                     'special' => '⭐ سبيشال',
                     'mix'     => '🔀 مكس',
                 ])
-                ->required(),
+                ->required()
+                ->unique(ignoreRecord: true, modifyRuleUsing: fn (Unique $rule) => $rule->where('product_id', $this->getOwnerRecord()->getKey()))
+                ->helperText('سعر واحد لكل عائلة'),
             Forms\Components\TextInput::make('price')
                 ->label('السعر الإضافي (₪)')
                 ->numeric()

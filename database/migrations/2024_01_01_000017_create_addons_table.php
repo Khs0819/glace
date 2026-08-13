@@ -11,7 +11,10 @@ return new class extends Migration
         // Shared catalog (product_id IS NULL) + per-product addons
         Schema::create('addons', function (Blueprint $table) {
             $table->id();
-            $table->foreignUuid('product_id')->nullable()->constrained()->nullOnDelete();
+            // Product-scoped addons die with their product. Using nullOnDelete
+            // here would silently promote them into the shared catalog
+            // (product_id IS NULL) and duplicate GET /menu/addons — handoff 08 §أ-5.
+            $table->foreignUuid('product_id')->nullable()->constrained()->cascadeOnDelete();
             $table->string('slug'); // exposed as "id" in API
             $table->string('label');
             $table->decimal('price', 8, 2);

@@ -10,6 +10,7 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class EventResource extends Resource
 {
@@ -21,6 +22,22 @@ class EventResource extends Resource
     protected static ?string $pluralModelLabel = 'الفعاليات';
     protected static ?int $navigationSort = 20;
     protected static ?string $recordTitleAttribute = 'title';
+
+    /**
+     * `IEvent.listImage` must not be null for published events (handoff 04 §3),
+     * so surface the backlog of events still missing a card image.
+     */
+    public static function getNavigationBadge(): ?string
+    {
+        $missing = static::getModel()::whereNull('list_image')->count();
+
+        return $missing > 0 ? $missing . ' بلا صورة' : null;
+    }
+
+    public static function getNavigationBadgeColor(): ?string
+    {
+        return 'warning';
+    }
 
     public static function form(Form $form): Form
     {
@@ -100,6 +117,16 @@ class EventResource extends Resource
                     ->color('gray'),
             ])
             ->defaultSort('date', 'desc')
+            ->filters([
+                Tables\Filters\Filter::make('missing_list_image')
+                    ->label('بدون صورة بطاقة')
+                    ->query(fn (Builder $query) => $query->whereNull('list_image'))
+                    ->toggle(),
+                Tables\Filters\Filter::make('missing_gallery')
+                    ->label('بدون معرض صور')
+                    ->query(fn (Builder $query) => $query->doesntHave('images'))
+                    ->toggle(),
+            ])
             ->actions([
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),

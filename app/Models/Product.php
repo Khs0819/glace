@@ -38,12 +38,12 @@ class Product extends Model
 
     public function containers(): HasMany
     {
-        return $this->hasMany(ProductContainer::class)->orderBy('sort_order');
+        return $this->hasMany(ProductContainer::class)->orderBy('sort_order')->orderBy('id');
     }
 
     public function sizes(): HasMany
     {
-        return $this->hasMany(ProductSize::class)->orderBy('sort_order');
+        return $this->hasMany(ProductSize::class)->orderBy('sort_order')->orderBy('id');
     }
 
     public function iceCreamAddonPrices(): HasMany
@@ -51,19 +51,22 @@ class Product extends Model
         return $this->hasMany(IceCreamAddonPrice::class);
     }
 
+    // The `id` tie-break keeps the payload order stable when several rows share a
+    // sort_order — without it SQLite/MySQL are free to answer from the
+    // (product_id, slug) unique index and the storefront order shuffles.
     public function items(): HasMany
     {
-        return $this->hasMany(ProductItem::class)->orderBy('sort_order');
+        return $this->hasMany(ProductItem::class)->orderBy('sort_order')->orderBy('id');
     }
 
     public function mixes(): HasMany
     {
-        return $this->hasMany(ProductMix::class)->orderBy('sort_order');
+        return $this->hasMany(ProductMix::class)->orderBy('sort_order')->orderBy('id');
     }
 
     public function addons(): HasMany
     {
-        return $this->hasMany(Addon::class)->orderBy('sort_order');
+        return $this->hasMany(Addon::class)->orderBy('sort_order')->orderBy('id');
     }
 
     public function flavors(): BelongsToMany

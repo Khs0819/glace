@@ -12,7 +12,7 @@
 */
 
 pest()->extend(Tests\TestCase::class)
- // ->use(Illuminate\Foundation\Testing\RefreshDatabase::class)
+    ->use(Illuminate\Foundation\Testing\RefreshDatabase::class)
     ->in('Feature');
 
 /*
@@ -41,7 +41,16 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
+/**
+ * Fake the public disk without losing its `url` setting.
+ *
+ * A bare Storage::fake('public') drops the configured url, so
+ * Storage::disk('public')->url() would return a relative path and upload tests
+ * could not verify the absolute-URL contract the handoff requires.
+ */
+function fakePublicDisk(): void
 {
-    // ..
+    Illuminate\Support\Facades\Storage::fake('public', [
+        'url' => rtrim(config('app.url'), '/') . '/storage',
+    ]);
 }
