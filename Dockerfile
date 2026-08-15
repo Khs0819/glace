@@ -76,5 +76,11 @@ RUN chown -R www-data:www-data /var/lib/nginx \
 
 EXPOSE 80
 
+# public/storage -> storage/app/public. Without it every uploaded image 404s,
+# because the contract serves media from /storage/... on the public disk.
+# Re-created on each boot since storage is usually a mounted volume.
 CMD php artisan migrate --force && \
+    php artisan storage:link --force && \
+    php artisan config:cache && \
+    php artisan route:cache && \
     /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
