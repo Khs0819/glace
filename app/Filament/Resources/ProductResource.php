@@ -138,13 +138,9 @@ class ProductResource extends Resource
                                     ->helperText('كاسة/عائلي = repeatable · براد مع بوظة = toggle'),
                                 Forms\Components\CheckboxList::make('flavor_families')
                                     ->label('عائلات النكهات المتاحة')
-                                    ->options([
-                                        'classic' => '🍦 كلاسيك',
-                                        'special' => '⭐ سبيشال',
-                                        'mix'     => '🔀 مكس',
-                                    ])
-                                    ->columns(3)
-                                    ->helperText('البراد الصادة: لا تحتاج عائلات (لا يوجد picker للنكهات)'),
+                                    ->options(\App\Support\FlavorFamily::pricingOptions())
+                                    ->columns(4)
+                                    ->helperText('تحدّد أي نكهات يمكن ربطها بالمنتج · «مكس» تسعيرة فقط ولا تحمل نكهات · البراد الصادة: لا تحتاج عائلات (لا يوجد picker للنكهات)'),
                             ])->aside(),
                             Forms\Components\Section::make('جدول الأسعار')->schema([
                                 Forms\Components\TextInput::make('pricing_label')

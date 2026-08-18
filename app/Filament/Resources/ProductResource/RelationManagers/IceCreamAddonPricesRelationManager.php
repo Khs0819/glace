@@ -29,11 +29,7 @@ class IceCreamAddonPricesRelationManager extends RelationManager
         return $form->schema([
             Forms\Components\Select::make('flavor_family')
                 ->label('عائلة النكهة')
-                ->options([
-                    'classic' => '🍦 كلاسيك',
-                    'special' => '⭐ سبيشال',
-                    'mix'     => '🔀 مكس',
-                ])
+                ->options(\App\Support\FlavorFamily::pricingOptions())
                 ->required()
                 ->unique(ignoreRecord: true, modifyRuleUsing: fn (Unique $rule) => $rule->where('product_id', $this->getOwnerRecord()->getKey()))
                 ->helperText('سعر واحد لكل عائلة'),

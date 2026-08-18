@@ -3,12 +3,15 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\FlavorResource\Pages;
+use App\Filament\Resources\FlavorResource\RelationManagers;
 use App\Models\Flavor;
+use App\Support\FlavorFamily;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class FlavorResource extends Resource
 {
@@ -28,6 +31,11 @@ class FlavorResource extends Resource
     }
 
     public static function getNavigationBadgeColor(): ?string { return 'danger'; }
+
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->withCount('products');
+    }
 
     public static function form(Form $form): Form
     {
@@ -49,18 +57,13 @@ class FlavorResource extends Resource
                     ->maxLength(100),
                 Forms\Components\ToggleButtons::make('family')
                     ->label('العائلة')
-                    ->options([
-                        'classic' => '🍦 كلاسيك (13)',
-                        'special' => '⭐ سبيشال (8)',
-                        'stevia'  => '🌿 ستيفيا (2)',
-                    ])
-                    ->colors([
-                        'classic' => 'primary',
-                        'special' => 'warning',
-                        'stevia'  => 'success',
-                    ])
+                    ->options(FlavorFamily::flavorOptions())
+                    ->colors(collect(FlavorFamily::flavorOptions())
+                        ->map(fn ($label, $family) => FlavorFamily::color($family))
+                        ->all())
                     ->required()
-                    ->inline(),
+                    ->inline()
+                    ->helperText('تظهر النكهة فقط في المنتجات التي فعّلت هذه العائلة في إعدادات Builder'),
                 Forms\Components\FileUpload::make('image')
                     ->label('صورة النكهة')
                     ->image()
@@ -105,18 +108,15 @@ class FlavorResource extends Resource
                 Tables\Columns\TextColumn::make('family')
                     ->label('العائلة')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'classic' => 'primary',
-                        'special' => 'warning',
-                        'stevia'  => 'success',
-                        default   => 'gray',
-                    })
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'classic' => '🍦 كلاسيك',
-                        'special' => '⭐ سبيشال',
-                        'stevia'  => '🌿 ستيفيا',
-                        default   => $state,
-                    }),
+                    ->color(fn (?string $state): string => FlavorFamily::color($state))
+                    ->formatStateUsing(fn (?string $state): string => FlavorFamily::label($state)),
+                Tables\Columns\TextColumn::make('products_count')
+                    ->label('المنتجات')
+                    ->badge()
+                    ->color(fn (int $state): string => $state > 0 ? 'success' : 'danger')
+                    ->formatStateUsing(fn (int $state): string => $state > 0 ? "{$state} منتج" : 'غير مربوطة')
+                    ->tooltip('عدد منتجات builder التي تعرض هذه النكهة')
+                    ->sortable(),
                 Tables\Columns\ToggleColumn::make('available')
                     ->label('متوفرة')
                     ->onColor('success')
@@ -132,16 +132,15 @@ class FlavorResource extends Resource
             ->filters([
                 Tables\Filters\SelectFilter::make('family')
                     ->label('العائلة')
-                    ->options([
-                        'classic' => '🍦 كلاسيك',
-                        'special' => '⭐ سبيشال',
-                        'stevia'  => '🌿 ستيفيا',
-                    ]),
+                    ->options(FlavorFamily::flavorOptions()),
                 Tables\Filters\TernaryFilter::make('available')
                     ->label('الحالة')
                     ->trueLabel('متوفرة فقط')
                     ->falseLabel('غير المتوفرة فقط')
                     ->placeholder('الكل'),
+                Tables\Filters\Filter::make('unlinked')
+                    ->label('غير مربوطة بأي منتج')
+                    ->query(fn (Builder $query): Builder => $query->whereDoesntHave('products')),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
@@ -164,6 +163,13 @@ class FlavorResource extends Resource
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ]);
+    }
+
+    public static function getRelations(): array
+    {
+        return [
+            RelationManagers\ProductsRelationManager::class,
+        ];
     }
 
     public static function getPages(): array

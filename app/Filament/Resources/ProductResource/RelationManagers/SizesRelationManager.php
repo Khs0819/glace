@@ -90,11 +90,7 @@ class SizesRelationManager extends RelationManager
                         ->schema([
                             Forms\Components\Select::make('flavor_family')
                                 ->label('عائلة النكهة')
-                                ->options([
-                                    'classic' => '🍦 كلاسيك',
-                                    'special' => '⭐ سبيشال',
-                                    'mix'     => '🔀 مكس',
-                                ])
+                                ->options(\App\Support\FlavorFamily::pricingOptions())
                                 ->required()
                                 ->distinct(),
                             Forms\Components\TextInput::make('price')

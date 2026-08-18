@@ -3,11 +3,13 @@
 namespace App\Filament\Resources\ProductResource\RelationManagers;
 
 use App\Models\Flavor;
+use App\Support\FlavorFamily;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class FlavorsRelationManager extends RelationManager
@@ -22,6 +24,23 @@ class FlavorsRelationManager extends RelationManager
     public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
     {
         return $ownerRecord->kind === 'builder' && ! empty($ownerRecord->flavor_families);
+    }
+
+    /**
+     * The families this product actually offers, minus the pricing-only `mix`
+     * tier. Attaching outside this list is what produced flavors whose family
+     * the storefront has no tab or price row for.
+     *
+     * @return array<int, string>
+     */
+    protected function offeredFamilies(): array
+    {
+        return FlavorFamily::pickableFrom($this->getOwnerRecord()->flavor_families);
+    }
+
+    protected function offersFamily(?string $family): bool
+    {
+        return in_array($family, $this->offeredFamilies(), true);
     }
 
     public function form(Form $form): Form
@@ -55,12 +74,16 @@ class FlavorsRelationManager extends RelationManager
                 Tables\Columns\TextColumn::make('family')
                     ->label('العائلة')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'classic' => 'primary',
-                        'special' => 'warning',
-                        'stevia'  => 'success',
-                        default   => 'gray',
-                    }),
+                    ->formatStateUsing(fn (?string $state): string => FlavorFamily::label($state))
+                    ->color(fn (Flavor $record): string => $this->offersFamily($record->family)
+                        ? FlavorFamily::color($record->family)
+                        : 'danger')
+                    ->icon(fn (Flavor $record): ?string => $this->offersFamily($record->family)
+                        ? null
+                        : 'heroicon-o-exclamation-triangle')
+                    ->tooltip(fn (Flavor $record): ?string => $this->offersFamily($record->family)
+                        ? null
+                        : 'هذه العائلة غير مفعّلة في إعدادات Builder — فعّلها أو أزل النكهة'),
                 Tables\Columns\ToggleColumn::make('available')
                     ->label('متوفر')
                     ->onColor('success')
@@ -71,12 +94,30 @@ class FlavorsRelationManager extends RelationManager
                     ->trueIcon('heroicon-o-star')
                     ->falseIcon('heroicon-o-minus'),
             ])
+            ->defaultSort('family')
+            ->filters([
+                Tables\Filters\SelectFilter::make('family')
+                    ->label('العائلة')
+                    ->options(FlavorFamily::flavorOptions()),
+                Tables\Filters\Filter::make('family_not_offered')
+                    ->label('عائلة غير مفعّلة للمنتج')
+                    ->query(fn (Builder $query): Builder => $query->whereNotIn(
+                        'flavors.family',
+                        $this->offeredFamilies(),
+                    )),
+            ])
             ->headerActions([
                 Tables\Actions\AttachAction::make()
                     ->label('إضافة نكهة')
                     ->preloadRecordSelect()
-                    ->recordSelectOptionsQuery(fn ($query) => $query->orderBy('family')->orderBy('name_ar'))
-                    ->recordTitle(fn (Flavor $record): string => "{$record->name_ar} ({$record->id}) — {$record->family}"),
+                    // Only offer flavors from families this product declares, so a
+                    // flavor can never land on a product that has no tab or price
+                    // row for its family.
+                    ->recordSelectOptionsQuery(fn (Builder $query): Builder => $query
+                        ->whereIn('family', $this->offeredFamilies())
+                        ->orderBy('family')
+                        ->orderBy('name_ar'))
+                    ->recordTitle(fn (Flavor $record): string => "{$record->name_ar} ({$record->id}) — " . FlavorFamily::label($record->family)),
             ])
             ->actions([
                 Tables\Actions\DetachAction::make()->label('إزالة'),

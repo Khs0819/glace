@@ -11,6 +11,7 @@ use App\Models\ProductItem;
 use App\Models\ProductMix;
 use App\Models\ProductSize;
 use App\Models\SizePrice;
+use App\Support\FlavorFamily;
 use Illuminate\Database\Seeder;
 
 class ProductSeeder extends Seeder
@@ -85,6 +86,21 @@ class ProductSeeder extends Seeder
         foreach ($prices as $family => $price) {
             SizePrice::create(['size_id' => $size->id, 'flavor_family' => $family, 'price' => $price]);
         }
+    }
+
+    /**
+     * Attach the global flavors whose family this product actually declares.
+     *
+     * Syncing every flavor used to hand builders `stevia` flavors while their
+     * flavor_families only listed classic/special/mix — the storefront then had
+     * no tab and no price row for them. To sell a family, declare it on the
+     * product (and give it a price row) rather than attaching around it.
+     */
+    private function attachDeclaredFlavors(Product $p): void
+    {
+        $p->flavors()->sync(
+            Flavor::whereIn('family', FlavorFamily::pickableFrom($p->flavor_families))->pluck('id')
+        );
     }
 
     private function addItem(Product $p, string $slug, string $label, float $price, bool $available = true, bool $isPremium = false, ?string $description = null, ?string $image = null, int $sort = 0): void
@@ -162,8 +178,7 @@ class ProductSeeder extends Seeder
         $this->addSize($p, 'biscuit-large',  'كبير',     3, ['classic' => 5, 'special' => 7],              'biscuit',  5);
         $this->addSize($p, 'takeaway-size',  'تيك اواي', 3, ['classic' => 5, 'special' => 7],              'takeaway', 6);
 
-        // Attach all 23 global flavors
-        $p->flavors()->sync(Flavor::pluck('id'));
+        $this->attachDeclaredFlavors($p);
     }
 
     // ─── 2. بوظة عائلي (family) — builder ────────────────────────────────────
@@ -192,8 +207,8 @@ class ProductSeeder extends Seeder
         $this->addSize($p, 'foam-half',    '1/2 لتر', 8,  ['classic' => 16, 'special' => 20, 'mix' => 18], 'foam',    2);
         $this->addSize($p, 'foam-one',     '1 لتر',   12, ['classic' => 31, 'special' => 38, 'mix' => 35], 'foam',    3);
 
-        // Attach all 23 global flavors (was missing — caused empty flavors step on /menu/order/family)
-        $p->flavors()->sync(Flavor::pluck('id'));
+        // Was missing entirely — caused an empty flavors step on /menu/order/family.
+        $this->attachDeclaredFlavors($p);
     }
 
     // ─── 3. براد (brad) — builder (no ball picking) ───────────────────────────
@@ -255,7 +270,7 @@ class ProductSeeder extends Seeder
             ['product_id' => $p->id, 'flavor_family' => 'mix',     'price' => 4, 'created_at' => now(), 'updated_at' => now()],
         ]);
 
-        $p->flavors()->sync(Flavor::pluck('id'));
+        $this->attachDeclaredFlavors($p);
     }
 
     // ─── 5. مشروبات باردة (cold-drinks) — flat-list ──────────────────────────
