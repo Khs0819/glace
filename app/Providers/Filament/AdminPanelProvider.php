@@ -41,10 +41,14 @@ class AdminPanelProvider extends PanelProvider
             ->darkMode(false)
             ->sidebarCollapsibleOnDesktop()
             ->navigationGroups([
+                \Filament\Navigation\NavigationGroup::make('الطلبات')->icon('heroicon-o-receipt-percent')->collapsed(false),
+                \Filament\Navigation\NavigationGroup::make('الزبائن')->icon('heroicon-o-users')->collapsed(false),
                 \Filament\Navigation\NavigationGroup::make('القائمة')->icon('heroicon-o-shopping-cart')->collapsed(false),
                 \Filament\Navigation\NavigationGroup::make('الصفحة الرئيسية')->icon('heroicon-o-home')->collapsed(true),
                 \Filament\Navigation\NavigationGroup::make('الفعاليات')->icon('heroicon-o-calendar-days')->collapsed(true),
                 \Filament\Navigation\NavigationGroup::make('الرسائل')->icon('heroicon-o-envelope')->collapsed(true),
+                \Filament\Navigation\NavigationGroup::make('التقارير')->icon('heroicon-o-chart-bar')->collapsed(false),
+                \Filament\Navigation\NavigationGroup::make('المحتوى')->icon('heroicon-o-document-text')->collapsed(true),
             ])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
@@ -53,6 +57,8 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\\Filament\\Widgets')
             ->widgets([
+                \App\Filament\Widgets\JawwalPayStatusWidget::class,
+                \App\Filament\Widgets\SmsStatusWidget::class,
                 \App\Filament\Widgets\StatsOverviewWidget::class,
                 \App\Filament\Widgets\LatestContactsWidget::class,
                 Widgets\AccountWidget::class,

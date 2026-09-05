@@ -25,6 +25,12 @@ class DatabaseSeeder extends Seeder
             EventSeeder::class,
             AddonSeeder::class,
             ProductSeeder::class,
+
+            // Storefront systems (handoff 10 · 13 · 15 · 16 · 17). All
+            // firstOrCreate, so reseeding never overwrites what the shop has
+            // since edited in the dashboard.
+            DeliveryZoneSeeder::class,
+            StorefrontContentSeeder::class,
         ]);
     }
 }

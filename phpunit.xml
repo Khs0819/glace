@@ -32,5 +32,32 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <!--
+            The suite must never reach the real Service Bus: apitest.jawwalpay.ps
+            is a live sandbox tied to the merchant account, and a stray call from
+            a test spends a real request against it. Blanking the credentials
+            makes the client refuse to send at all; tests that need the gateway
+            fake it explicitly via fakeJawwalPay().
+        -->
+        <env name="JAWWALPAY_ENABLED" value="false"/>
+        <env name="JAWWALPAY_BASE_URL" value="https://apitest.jawwalpay.test"/>
+        <env name="JAWWALPAY_USERNAME" value=""/>
+        <env name="JAWWALPAY_PASSWORD" value=""/>
+        <env name="JAWWALPAY_SECRET" value=""/>
+        <env name="JAWWALPAY_LOG" value="false"/>
+
+        <!--
+            Same reasoning for SMS, with an extra edge: hotsms.ps IS reachable
+            and the account holds real credit, so an unpinned driver would not
+            fail politely — it would text strangers and bill the shop for it.
+            The URL is blanked too, so even a mis-set driver has nowhere to go.
+        -->
+        <env name="SMS_DRIVER" value="log"/>
+        <env name="SMS_API_URL" value=""/>
+        <env name="SMS_API_USERNAME" value=""/>
+        <env name="SMS_API_PASSWORD" value=""/>
+        <env name="SMS_API_TOKEN" value=""/>
+        <env name="SMPP_USERNAME" value=""/>
+        <env name="SMPP_PASSWORD" value=""/>
     </php>
 </phpunit>
