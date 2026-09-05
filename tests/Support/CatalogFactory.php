@@ -2,9 +2,11 @@
 
 namespace Tests\Support;
 
+use App\Models\Addon;
 use App\Models\Event;
 use App\Models\EventImage;
 use App\Models\Flavor;
+use App\Models\IceCreamAddonPrice;
 use App\Models\MenuCategory;
 use App\Models\Product;
 use App\Models\ProductContainer;
@@ -134,6 +136,30 @@ class CatalogFactory
             'family'    => 'classic',
             'available' => true,
         ], $attributes));
+    }
+
+    /** A shared addon when $product is null, otherwise one scoped to it. */
+    public static function addon(string $slug, ?Product $product = null, array $attributes = []): Addon
+    {
+        return Addon::create(array_merge([
+            'product_id' => $product?->id,
+            'slug'       => $slug,
+            'label'      => 'إضافة ' . $slug,
+            'price'      => 3,
+            'available'  => true,
+            'type'       => 'toggle',
+            'max_qty'    => null,
+            'sort_order' => 1,
+        ], $attributes));
+    }
+
+    public static function iceCreamAddonPrice(Product $product, string $family, float $price): IceCreamAddonPrice
+    {
+        return IceCreamAddonPrice::create([
+            'product_id'    => $product->id,
+            'flavor_family' => $family,
+            'price'         => $price,
+        ]);
     }
 
     public static function event(array $attributes = []): Event

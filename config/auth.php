@@ -42,6 +42,20 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+
+        /*
+         * Storefront accounts. A bare `Authorization: <token>` header — no
+         * `Bearer` prefix — resolved against customer_tokens by the
+         * `customer-token` driver registered in AppServiceProvider.
+         *
+         * Deliberately a separate guard from `web`: that one backs the Filament
+         * panel, and the two audiences must never be able to stand in for each
+         * other.
+         */
+        'customer' => [
+            'driver' => 'customer-token',
+            'provider' => 'customers',
+        ],
     ],
 
     /*
@@ -65,6 +79,11 @@ return [
         'users' => [
             'driver' => 'eloquent',
             'model' => env('AUTH_MODEL', User::class),
+        ],
+
+        'customers' => [
+            'driver' => 'eloquent',
+            'model' => App\Models\Customer::class,
         ],
 
         // 'users' => [

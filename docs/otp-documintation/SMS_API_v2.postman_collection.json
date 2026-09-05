@@ -1,0 +1,439 @@
+{
+  "info": {
+    "_postman_id": "3b3a9b55-6b1e-4e2f-8d46-4b9c7a0f2e51",
+    "name": "SMS REST API - v2",
+    "description": "## SMS REST API v2\n\n### Variables\n- `base_url` — e.g. `http://127.0.0.1:8000`\n- `api_token` — set automatically by **Login** test when `data.api_token` is present\n- `pin_code` — OTP code used in Login step 2\n\n### Login\n- Two-step login flow:\n  - Step 1: send `user_name` + `user_pass` without `pin_code` → response `code=1002` (`otp_required=true`).\n  - Step 2: send the same credentials with `pin_code` → response `code=1001` with `api_token`.\n- Optional body field `force_new_token` (boolean): if omitted, an existing `api_token` may be **reused** (`reused: true` in response).\n- The API service must be enabled on the account (error 1401 otherwise).\n\n### Account\n- `GET .../me` returns: `user_no`, `user_name`, `prev`, `name`, `email`, `company`, `mobile`, `public_ip`, `credits`, `due_amount`, `finish_date`.\n- `GET .../credits` returns `{ data: { credits } }`.\n- Legacy alias still exists: `.../account/credits`.\n\n### Sender names\n- `GET .../senders` — approved names on the account (`user.sender`).\n- `GET .../senders/requests` — this account's requests (`send_no`, status, `has_attachment`).\n- `POST .../senders` — `multipart/form-data`: `sender_name`, `authorized_name`, `company_name`, `mobile`, optional `notes`, optional `attachment` (PDF/JPG/PNG, max 10 MB). Returns `data.send_no`.\n- `POST .../senders/{send_no}/authorization` — upload or replace the letter. Use `send_no` from the add response or from the requests list.\n- The file is stored in the portal `auth_letter` folder as `{send_no}.{ext}` and `send_auth` is set to 1.\n\n### Token formats\n- `Authorization: Bearer <api_token>`\n- `X-API-TOKEN: <api_token>`\n- `api_token` query/body parameter\n\n### Send message\n`POST .../messages/send` — requires `sender`; success: `data.provider` = `queue_sms`, `data.provider_response` includes `networks_report`, `total_cost`, `sms_refs`, `filter_flag`, `filtered`.\n\n### Send message summary\nSame body as send, but only returns routing, segments, cost, and `can_send` without sending or deducting credits.\n\n### Send group\n`POST .../messages/sendgroup` — requires `group_ids`, `message`, `sender`; loads contacts from selected groups, normalizes mobiles, removes duplicates, then sends through the same pipeline.\n\n### Send group summary\nSame body as sendgroup, but only returns recipients, cost, and `can_send` without sending or deducting credits.\n\n### Send variables\n`POST .../messages/sendvar` — requires `sender_id`; template + `rows`.\n\n### Send variables summary\nSame body as sendvar, but only returns rows summary, total segments, total cost, and `can_send` without sending or deducting credits.\n\n### Archive message\n`POST .../messages/archive` — archive-only: stores the message in the sent history (`smsc_sent`) without deducting credits and without queuing/sending. Requires `mobile`, `message`, approved `sender`, and `sms_type` (currently only `300` = WhatsApp text message).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://127.0.0.1:8000" },
+    { "key": "api_token", "value": "" },
+    { "key": "pin_code", "value": "" },
+    { "key": "send_no", "value": "18451" }
+  ],
+  "item": [
+    {
+      "name": "Auth (REST v2)",
+      "item": [
+        {
+          "name": "Login (REST v2 Step 1/2) - saves api_token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "try {",
+                  "  const json = pm.response.json();",
+                  "  const token = json?.data?.api_token;",
+                  "  if (token) {",
+                  "    pm.collectionVariables.set('api_token', token);",
+                  "  }",
+                  "} catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_name\": \"demo\",\n  \"user_pass\": \"demo\",\n  \"pin_code\": \"{{pin_code}}\",\n  \"force_new_token\": false\n}"
+            },
+            "description": "Step 1: leave `pin_code` empty to receive OTP challenge (`code=1002`). Step 2: set `pin_code` to received OTP to get `api_token` (`code=1001`). Set `force_new_token=true` to always issue a fresh token.",
+            "url": {
+              "raw": "{{base_url}}/api/rest/v2/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rest", "v2", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Logout (REST v2)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{api_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/api/rest/v2/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rest", "v2", "auth", "logout"]
+            }
+          }
+        },
+        {
+          "name": "Send OTP (REST v2)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{api_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"MyBrand\",\n  \"mobile\": \"970599999999\",\n  \"msg_prefix\": \"Your verification code is\",\n  \"exp_min\": 10\n}"
+            },
+            "description": "Token-protected OTP sender. Sends a one-time verification code by SMS to the given mobile number; the code is kept temporarily so it can be checked later via the Verify OTP request.",
+            "url": {
+              "raw": "{{base_url}}/api/rest/v2/auth/otp/send",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rest", "v2", "auth", "otp", "send"]
+            }
+          }
+        },
+        {
+          "name": "Verify OTP (REST v2)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{api_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"MyBrand\",\n  \"mobile\": \"970599999999\",\n  \"otp\": \"123456\"\n}"
+            },
+            "description": "Verifies the OTP code previously sent to the same sender and mobile. Once verified successfully, the code is consumed and cannot be used again.",
+            "url": {
+              "raw": "{{base_url}}/api/rest/v2/auth/otp/verify",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rest", "v2", "auth", "otp", "verify"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Account (REST v2)",
+      "item": [
+        {
+          "name": "Me (REST v2)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{api_token}}", "type": "string" }] },
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/rest/v2/me",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rest", "v2", "me"]
+            }
+          }
+        },
+        {
+          "name": "Credits (REST v2)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{api_token}}", "type": "string" }] },
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/rest/v2/credits",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rest", "v2", "credits"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Messages (REST v2)",
+      "item": [
+        {
+          "name": "Send message (REST v2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 on success', function () {",
+                  "  if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.code).to.eql(1001);",
+                  "    pm.expect(json.data && json.data.provider).to.eql('queue_sms');",
+                  "    pm.expect(json.data.provider_response).to.be.an('object');",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{api_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mobile\": \"+201000000000\",\n  \"message\": \"Hello from SMS API\",\n  \"sender\": \"MyBrand\"\n}"
+            },
+            "description": "`sender` is required.",
+            "url": {
+              "raw": "{{base_url}}/api/rest/v2/messages/send",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rest", "v2", "messages", "send"]
+            }
+          }
+        },
+        {
+          "name": "Send message summary (REST v2)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{api_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mobile\": \"+201000000000,+201000000001\",\n  \"message\": \"Hello from SMS API\",\n  \"sender\": \"MyBrand\"\n}"
+            },
+            "description": "Preview only. Returns cost/segments/credit summary without sending or deducting credits.",
+            "url": {
+              "raw": "{{base_url}}/api/rest/v2/messages/send/summary",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rest", "v2", "messages", "send", "summary"]
+            }
+          }
+        },
+        {
+          "name": "Send group (REST v2) - sendgroup",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{api_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"group_ids\": [12, 18],\n  \"message\": \"Hello group from SMS API\",\n  \"sender\": \"MyBrand\"\n}"
+            },
+            "description": "Loads contacts from the authenticated user's groups, normalizes mobiles, removes duplicates, then sends the message.",
+            "url": {
+              "raw": "{{base_url}}/api/rest/v2/messages/sendgroup",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rest", "v2", "messages", "sendgroup"]
+            }
+          }
+        },
+        {
+          "name": "Send group summary (REST v2) - sendgroup",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{api_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"group_ids\": [12, 18],\n  \"message\": \"Hello group from SMS API\",\n  \"sender\": \"MyBrand\"\n}"
+            },
+            "description": "Preview only. Loads contacts from the selected groups, normalizes mobiles, removes duplicates, then returns recipients/cost summary without sending.",
+            "url": {
+              "raw": "{{base_url}}/api/rest/v2/messages/sendgroup/summary",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rest", "v2", "messages", "sendgroup", "summary"]
+            }
+          }
+        },
+        {
+          "name": "Send variables (REST v2) - sendvar",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{api_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender_id\": \"SMS\",\n  \"mobile_column\": \"mobile\",\n  \"message_template\": \"Hello {name}, order to {city}\",\n  \"rows\": [\n    { \"mobile\": \"970599999999\", \"name\": \"Ahmed\", \"city\": \"Gaza\" },\n    { \"mobile\": \"970588888888\", \"name\": \"Mohammad\", \"city\": \"Nablus\" }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/rest/v2/messages/sendvar",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rest", "v2", "messages", "sendvar"]
+            }
+          }
+        },
+        {
+          "name": "Send variables summary (REST v2) - sendvar",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{api_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender_id\": \"SMS\",\n  \"mobile_column\": \"mobile\",\n  \"message_template\": \"Hello {name}, order to {city}\",\n  \"rows\": [\n    { \"mobile\": \"970599999999\", \"name\": \"Ahmed\", \"city\": \"Gaza\" },\n    { \"mobile\": \"970588888888\", \"name\": \"Mohammad\", \"city\": \"Nablus\" }\n  ]\n}"
+            },
+            "description": "Preview only. Returns rows summary, total segments, total cost, and can_send without sending.",
+            "url": {
+              "raw": "{{base_url}}/api/rest/v2/messages/sendvar/summary",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rest", "v2", "messages", "sendvar", "summary"]
+            }
+          }
+        },
+        {
+          "name": "Archive message (REST v2) - archive only",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 on success', function () {",
+                  "  if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.code).to.eql(1001);",
+                  "    pm.expect(json.data && json.data.archived).to.eql(true);",
+                  "    pm.expect(json.data.queued).to.eql(false);",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{api_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mobile\": \"970599999999\",\n  \"message\": \"WhatsApp text to archive\",\n  \"sender\": \"MyBrand\",\n  \"sms_type\": 300\n}"
+            },
+            "description": "Saves the message to your sent history without actually sending it and without deducting credits. Useful for logging messages delivered through other channels (e.g. WhatsApp). `sender` must be approved on the account. `sms_type` currently only allows 300 (Archived WhatsApp).",
+            "url": {
+              "raw": "{{base_url}}/api/rest/v2/messages/archive",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rest", "v2", "messages", "archive"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Senders (REST v2)",
+      "item": [
+        {
+          "name": "Approved senders (REST v2)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{api_token}}", "type": "string" }] },
+            "method": "GET",
+            "description": "Activated sender names on the account (`user.sender`). Use these values when sending SMS.",
+            "url": {
+              "raw": "{{base_url}}/api/rest/v2/senders",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rest", "v2", "senders"]
+            }
+          }
+        },
+        {
+          "name": "Sender requests (REST v2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const first = pm.response.json()?.data?.requests?.[0];",
+                  "  if (first && first.send_no) {",
+                  "    pm.collectionVariables.set('send_no', String(first.send_no));",
+                  "  }",
+                  "} catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{api_token}}", "type": "string" }] },
+            "method": "GET",
+            "description": "This account's sender-name requests. Saves the first `send_no` into the collection variable.",
+            "url": {
+              "raw": "{{base_url}}/api/rest/v2/senders/requests",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rest", "v2", "senders", "requests"]
+            }
+          }
+        },
+        {
+          "name": "Add sender name (REST v2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const sendNo = pm.response.json()?.data?.send_no;",
+                  "  if (sendNo) {",
+                  "    pm.collectionVariables.set('send_no', String(sendNo));",
+                  "  }",
+                  "} catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{api_token}}", "type": "string" }] },
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "sender_name", "value": "MyBrand", "type": "text" },
+                { "key": "authorized_name", "value": "Ahmed Ali", "type": "text" },
+                { "key": "company_name", "value": "Example Co", "type": "text" },
+                { "key": "mobile", "value": "970599999999", "type": "text" },
+                { "key": "notes", "value": "Marketing SMS", "type": "text" },
+                { "key": "attachment", "type": "file", "src": "", "disabled": true }
+              ]
+            },
+            "description": "`sender_name`: 1-11 chars, must contain an English letter. `attachment` is optional (PDF/JPG/PNG, max 10 MB). Without a file, use `data.send_no` to upload later. The test script saves `send_no`.",
+            "url": {
+              "raw": "{{base_url}}/api/rest/v2/senders",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rest", "v2", "senders"]
+            }
+          }
+        },
+        {
+          "name": "Upload authorization (REST v2)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{api_token}}", "type": "string" }] },
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "attachment", "type": "file", "src": "letter.pdf" }
+              ]
+            },
+            "description": "Upload or replace the authorization letter. Uses `{{send_no}}` from Add sender or Sender requests.",
+            "url": {
+              "raw": "{{base_url}}/api/rest/v2/senders/{{send_no}}/authorization",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rest", "v2", "senders", "{{send_no}}", "authorization"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Data (v2) - Not implemented yet",
+      "item": [
+        {
+          "name": "Groups (v2)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{api_token}}", "type": "string" }] },
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/rest/v2/groups",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rest", "v2", "groups"]
+            }
+          }
+        },
+        {
+          "name": "Contacts (v2)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{api_token}}", "type": "string" }] },
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/rest/v2/contacts",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rest", "v2", "contacts"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
+
