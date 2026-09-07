@@ -2,10 +2,11 @@
 
 namespace App\Services\Sms;
 
+use App\Exceptions\SmsDeliveryException;
 use App\Support\PhoneNumber;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use RuntimeException;
+use Throwable;
 
 /**
  * Sends one SMS, through whichever channel the shop has been given.
@@ -36,7 +37,7 @@ class SmsSender
     public function __construct(private readonly array $config = []) {}
 
     /**
-     * @throws RuntimeException when the message could not be handed off
+     * @throws SmsDeliveryException when the message could not be handed off
      */
     public function send(string $phone, string $message): void
     {
@@ -51,7 +52,7 @@ class SmsSender
             'rest' => $this->viaRest($number, $message),
             'http' => $this->viaHttp($number, $message),
             'null' => null,
-            default => throw new RuntimeException("Unknown SMS driver [{$this->driver()}]."),
+            default => throw new SmsDeliveryException("Unknown SMS driver [{$this->driver()}]."),
         };
     }
 
@@ -107,7 +108,7 @@ class SmsSender
             // Name the driver that actually works. Pointing at smpp here sent
             // whoever read this log to a port that is firewalled off, while
             // the HTTP gateway on the same account was up the whole time.
-            throw new RuntimeException(
+            throw new SmsDeliveryException(
                 'SMS_DRIVER is "log" in production — one-time codes would never reach customers. '
                 . 'Set SMS_DRIVER=hotsms with SMS_API_URL, SMS_API_USERNAME, SMS_API_PASSWORD and '
                 . 'SMS_SENDER, then run `php artisan config:clear && php artisan sms:check`.',
@@ -122,14 +123,38 @@ class SmsSender
 
     private function viaHotSms(string $number, string $message): void
     {
-        $reference = $this->hotsms()->send($number, $message);
+        $reference = $this->deliver(fn () => $this->hotsms()->send($number, $message));
 
         Log::info('[sms] sent via hotsms', ['to' => PhoneNumber::mask($number), 'ref' => $reference]);
     }
 
+    /**
+     * Run a driver, and turn anything it throws into a delivery failure.
+     *
+     * A gateway that refuses us — no credit, an unapproved sender name, an
+     * account switch left off — is not a fault in this application, and a 500
+     * says it is. That misfiles the incident and tells the customer the wrong
+     * thing about what to do next.
+     *
+     * @param  callable(): string  $send
+     */
+    private function deliver(callable $send): string
+    {
+        try {
+            return $send();
+        } catch (SmsDeliveryException $e) {
+            throw $e;
+        } catch (Throwable $e) {
+            // The provider's own words go to the log, where they are useful.
+            Log::error('[sms] delivery failed', ['driver' => $this->driver(), 'reason' => $e->getMessage()]);
+
+            throw new SmsDeliveryException($e->getMessage(), previous: $e);
+        }
+    }
+
     private function viaSmpp(string $number, string $message): void
     {
-        $reference = $this->smpp()->send($number, $message);
+        $reference = $this->deliver(fn () => $this->smpp()->send($number, $message));
 
         // The reference, never the body: the body is the one-time code.
         Log::info('[sms] sent via smpp', ['to' => PhoneNumber::mask($number), 'ref' => $reference]);
@@ -137,7 +162,7 @@ class SmsSender
 
     private function viaRest(string $number, string $message): void
     {
-        $reference = $this->rest()->send($number, $message);
+        $reference = $this->deliver(fn () => $this->rest()->send($number, $message));
 
         Log::info('[sms] sent via rest', ['to' => PhoneNumber::mask($number), 'ref' => $reference]);
     }
@@ -148,7 +173,7 @@ class SmsSender
         $url  = (string) ($http['url'] ?? '');
 
         if ($url === '') {
-            throw new RuntimeException('SMS_HTTP_URL is not configured.');
+            throw new SmsDeliveryException('SMS_HTTP_URL is not configured.');
         }
 
         $response = Http::timeout((int) ($http['timeout'] ?? 15))
@@ -165,7 +190,7 @@ class SmsSender
         if ($response->failed()) {
             // Body deliberately not logged: it echoes the message, and the
             // message is the one-time code.
-            throw new RuntimeException('SMS gateway rejected the message (HTTP ' . $response->status() . ').');
+            throw new SmsDeliveryException('SMS gateway rejected the message (HTTP ' . $response->status() . ').');
         }
     }
 }

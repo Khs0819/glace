@@ -66,6 +66,56 @@ jawwalCode: (omitted — only for paymentMethod=jawwal)
 }
 ```
 
+### شكل `items[]` بالتفصيل (محدّث 2026-09-07)
+
+كل سطر يحدد **متغيّراً واحداً** من المنتج. `productId` وحده لا يكفي — فهو المنتج
+الأب، وسعر «نوتيلا» غير سعر «سادة» تحته.
+
+**بالمعرّفات (id) — وهذا ما نوصي به:**
+
+| الحقل | متى | مصدره من `/menu/products/{slug}` |
+|---|---|---|
+| `productId` | دائماً | `id` (UUID المنتج الأب) |
+| `itemId` | قائمة مسطّحة | `items[].id` |
+| `mixId` | قائمة مسطّحة، عند اختيار مكس | `mixes[].id` |
+| `sizeId` | Builder | `sizes[].id` (مثلاً `plastic-half`) |
+| `containerId` | Builder، إن وُجدت `containerOptions` | `containerOptions[].id` (مثلاً `plastic`) |
+| `flavorIds[]` | Builder بنكهات | `flavors[].id`، **مكرّرة بعدد الكرات** |
+| `quantity` | دائماً | — |
+
+**بالأسماء (احتياط):** إن لم يُرسَل معرّف، يقبل الخادم نص العرض:
+
+| الحقل | يطابَق مع |
+|---|---|
+| `type` | اسم الصنف في القائمة المسطّحة، أو اسم الحجم في Builder |
+| `size` | اسم الحجم في Builder (يفوز على `type`) |
+| `container` | اسم الحاوية |
+
+⚠ الاسم ليس معرّفاً ثابتاً. إن حمل صنفان الاسم نفسه **يُرفض السطر** بدل التخمين
+— لأن التخمين يعني سعراً خاطئاً يدفعه العميل. أرسلوا المعرّفات متى توفّرت.
+
+**تُتجاهَل تماماً:** `unitPrice`, `addonTotal`, `flatAddonTotal`, `subtotal`,
+`total`, `name`, `image`, `id` (مفتاح React المحلي). أرسلوها أو لا ترسلوها — لا
+أثر لها.
+
+مثال قائمة مسطّحة:
+
+```json
+{ "productId": "019ffa28-...", "itemId": "nutella", "quantity": 1 }
+```
+
+مثال Builder:
+
+```json
+{
+  "productId": "019ffa28-...",
+  "containerId": "plastic",
+  "sizeId": "plastic-half",
+  "flavorIds": ["banana", "banana", "mango"],
+  "quantity": 1
+}
+```
+
 **نقاط حرجة:**
 
 - **السيرفر يحسب الأسعار من جديد** (`unitPrice`, `addonTotal`, `subtotal`, `discount`, `total`) — ما يثق بأي رقم سعر جاي من الفرونت، فقط بـ`productId`/`selections ids`/`quantity`/`couponCode`. هاد أهم بند أمني بكل الملف.
