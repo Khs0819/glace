@@ -134,7 +134,46 @@ class CartPricer
             return $this->priceItem($path, $line, $product);
         }
 
+        /*
+         * No id, so fall back to the label — the same courtesy the builder
+         * path has always had, and its absence here is why a flat-list line
+         * could not be ordered at all: the storefront names the variant in
+         * `type` and sends no id for it.
+         *
+         * Items first, then mixes: a mix is picked by name too ("مكس عربي"),
+         * and the two namespaces do not overlap in practice.
+         */
+        if (filled($label = $line['itemLabel'] ?? null)) {
+            if ($item = $this->unique($product->items, 'label', $label, "{$path}.itemId")) {
+                return $this->priceItem($path, ['itemId' => $item->slug] + $line, $product);
+            }
+
+            if ($mix = $this->unique($product->mixes, 'label', $label, "{$path}.itemId")) {
+                return $this->priceMix($path, ['mixId' => $mix->slug] + $line, $product);
+            }
+        }
+
         $this->fail("{$path}.itemId", 'اختر صنفاً من القائمة');
+    }
+
+    /**
+     * The one option carrying this label, or null when none does.
+     *
+     * Ambiguity is refused rather than resolved: two items sharing a name are
+     * two different prices, and picking either is a coin toss the customer
+     * pays for.
+     *
+     * @param  Collection<int, mixed>  $options
+     */
+    private function unique(Collection $options, string $field, string $label, string $key): mixed
+    {
+        $matches = $options->where($field, $label)->values();
+
+        if ($matches->count() > 1) {
+            $this->fail($key, 'أكثر من صنف يحمل هذا الاسم — يرجى إعادة اختيار الصنف');
+        }
+
+        return $matches->first();
     }
 
     /**

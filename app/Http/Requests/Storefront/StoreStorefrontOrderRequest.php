@@ -49,6 +49,25 @@ class StoreStorefrontOrderRequest extends FormRequest
             'items.*.quantity'  => ['required', 'integer', 'min:1', 'max:50'],
             'items.*.notes'     => ['nullable', 'string', 'max:500'],
 
+            /*
+             * The chosen variant, sent as ids.
+             *
+             * These MUST be listed even though the pricer does the real
+             * checking, because the controller passes `validated()` on: a key
+             * with no rule here is deleted from the payload before any of this
+             * reaches the catalog. Leaving them out did not loosen validation
+             * — it silently threw the customer's choice away and then blamed
+             * them for not making one.
+             */
+            'items.*.itemId'      => ['nullable', 'string', 'max:100'],
+            'items.*.mixId'       => ['nullable', 'string', 'max:100'],
+            'items.*.sizeId'      => ['nullable', 'string', 'max:100'],
+            'items.*.containerId' => ['nullable', 'string', 'max:100'],
+            'items.*.flavorIds'   => ['nullable', 'array', 'max:40'],
+            'items.*.flavorIds.*' => ['string', 'max:100'],
+            'items.*.mixItemIds'  => ['nullable', 'array', 'max:40'],
+            'items.*.mixItemIds.*' => ['string', 'max:100'],
+
             // Selections are shape-checked only. Whether an id exists, is
             // available and belongs to this product is decided by CartPricer
             // against the live catalog.
@@ -89,7 +108,10 @@ class StoreStorefrontOrderRequest extends FormRequest
             'items.*.mixItemIds.*' => ['string', 'max:100'],
 
             // Display labels the pricer falls back to when no id was sent.
+            // `size` is the builder's size label and `type` names the variant
+            // — an item label on a flat list, a size label on a builder.
             'items.*.type'      => ['nullable', 'string', 'max:100'],
+            'items.*.size'      => ['nullable', 'string', 'max:100'],
             'items.*.container' => ['nullable', 'string', 'max:100'],
 
             'paymentMethod'  => ['required', Rule::in(Order::PAYMENT_METHODS)],

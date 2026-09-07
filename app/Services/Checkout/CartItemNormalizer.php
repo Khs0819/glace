@@ -64,11 +64,20 @@ class CartItemNormalizer
         $line['itemId']      = $item['itemId'] ?? self::firstId($grouped['item'] ?? []);
         $line['mixId']       = $item['mixId'] ?? self::firstId($grouped['mix'] ?? []);
 
-        // `type` and `container` are labels ("صغير", "كاسة"), not slugs. They are
-        // only a fallback: a label is not a stable identifier — two products can
-        // both call a size "كبير" — so the pricer only consults these when no id
-        // was sent, and refuses the line if the label is ambiguous.
-        $line['sizeLabel']      = self::label($item['type'] ?? null);
+        /*
+         * Labels ("صغير", "كاسة"), not slugs, and only ever a fallback: a label
+         * is not a stable identifier — two products can both call a size
+         * "كبير" — so the pricer consults these only when no id was sent, and
+         * refuses the line outright if the label is ambiguous rather than
+         * guessing and charging the wrong price.
+         *
+         * `type` carries different things on the two product shapes, which is
+         * why it feeds both fields: on a flat list it names the variant
+         * ("فانيليا"), on a builder it names the size. `size` is explicit and
+         * therefore wins for the size whenever it is present.
+         */
+        $line['sizeLabel']      = self::label($item['size'] ?? null) ?? self::label($item['type'] ?? null);
+        $line['itemLabel']      = self::label($item['itemLabel'] ?? null) ?? self::label($item['type'] ?? null);
         $line['containerLabel'] = self::label($item['container'] ?? null);
 
         $line['flavorIds'] = $item['flavorIds']
