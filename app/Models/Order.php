@@ -79,10 +79,10 @@ class Order extends Model
 
     public const DELIVERY_METHODS = ['delivery', 'pickup', 'dine-in'];
 
-    public const PAYMENT_METHODS = ['jawwal', 'jawwal-manual', 'paypal', 'cash', 'visa', 'wallet', 'bop'];
+    public const PAYMENT_METHODS = ['jawwal', 'jawwal-manual', 'palpay', 'cash', 'visa', 'wallet', 'bop'];
 
     /** Paid out-of-band; the customer uploads proof instead (handoff 13). */
-    public const RECEIPT_METHODS = ['jawwal-manual', 'paypal', 'bop'];
+    public const RECEIPT_METHODS = ['jawwal-manual', 'palpay', 'bop'];
 
     /** Taken at the counter, so they cannot be the payment for a delivery. */
     public const IN_STORE_METHODS = ['cash', 'visa'];
@@ -96,6 +96,7 @@ class Order extends Model
         'scheduled_for', 'cancel_reason', 'cancelled_at', 'received_at', 'delivered_at', 'paid_at',
         'table_number', 'printed_at', 'print_count', 'print_error',
         'paid_by', 'shift_id', 'refunded_amount', 'refunded_at',
+        'tendered_amount', 'change_credited', 'change_credited_at',
     ];
 
     protected $casts = [
@@ -115,6 +116,9 @@ class Order extends Model
         'refunded_at'        => 'datetime',
         'refunded_amount'    => 'float',
         'print_count'        => 'integer',
+        'tendered_amount'    => 'float',
+        'change_credited'    => 'float',
+        'change_credited_at' => 'datetime',
     ];
 
     /**
@@ -277,5 +281,27 @@ class Order extends Model
     public static function newPublicToken(): string
     {
         return Str::random(64);
+    }
+
+    /**
+     * Change the customer is owed for handing over more than the total.
+     *
+     * Zero unless they declared a larger amount at checkout. Read off the
+     * order's own total, never off anything the client sent — the total here
+     * is the one the server priced.
+     */
+    public function changeDue(): float
+    {
+        if ($this->tendered_amount === null) {
+            return 0.0;
+        }
+
+        return max(0.0, round($this->tendered_amount - $this->total, 2));
+    }
+
+    /** Whether change is owed and has not yet reached the wallet. */
+    public function changePending(): bool
+    {
+        return $this->changeDue() > 0 && $this->change_credited_at === null;
     }
 }

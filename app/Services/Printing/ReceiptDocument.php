@@ -134,7 +134,7 @@ class ReceiptDocument
             'jawwal'        => 'جوال باي',
             'jawwal-manual' => 'جوال باي (تحويل)',
             'bop'           => 'بنك فلسطين',
-            'paypal'        => 'PayPal',
+            'palpay'        => 'PalPay',
         ][$this->order->payment_method] ?? $this->order->payment_method;
     }
 
@@ -142,6 +142,30 @@ class ReceiptDocument
     public function paid(): bool
     {
         return $this->order->isPaid();
+    }
+
+    /**
+     * What the customer handed over, and the change going to their wallet.
+     *
+     * On the paper because of one specific mistake it prevents: the change is
+     * credited, so there are no coins to give back. A cashier reading a total
+     * of 36 against a hundred shekel note will hand back 64 out of habit — and
+     * the shop has then paid it twice.
+     *
+     * @return array<string, string> label => rendered value, empty when none
+     */
+    public function tenderLines(): array
+    {
+        $change = $this->order->changeDue();
+
+        if ($change <= 0) {
+            return [];
+        }
+
+        return [
+            'المدفوع'          => number_format((float) $this->order->tendered_amount, 2),
+            'الباقي (للمحفظة)' => number_format($change, 2),
+        ];
     }
 
     /** @return array<int, string> */
@@ -227,6 +251,15 @@ class ReceiptDocument
         );
 
         $push($this->columns('الدفع', $this->paymentLabel(), $width));
+
+        foreach ($this->tenderLines() as $label => $value) {
+            $push($this->columns($label, $value, $width));
+        }
+
+        if ($this->tenderLines() !== []) {
+            // Loud, because it countermands the reflex.
+            $push('*** لا تُعِد باقياً نقداً ***', ['align' => 'center', 'bold' => true]);
+        }
 
         if (! $this->paid()) {
             $push('*** غير مدفوع ***', ['align' => 'center', 'bold' => true]);

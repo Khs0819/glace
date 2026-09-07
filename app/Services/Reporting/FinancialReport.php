@@ -266,7 +266,7 @@ class FinancialReport
         'jawwal'        => 'جوال باي',
         'jawwal-manual' => 'جوال باي (تحويل)',
         'bop'           => 'بنك فلسطين',
-        'paypal'        => 'PayPal',
+        'palpay'        => 'PalPay',
     ];
 
     public const CHANNEL_LABELS = [

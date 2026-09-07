@@ -61,6 +61,33 @@ class StoreStorefrontOrderRequest extends FormRequest
             'items.*.flatSelections.*.id' => ['required', 'string', 'max:100'],
             'items.*.flatSelections.*.qty' => ['nullable', 'integer', 'min:1', 'max:50'],
 
+            /*
+             * The same choices as flat ids, which is how the storefront sends
+             * them today.
+             *
+             * These have to be listed even though nothing here inspects them:
+             * `validated()` returns only the keys that appear in these rules,
+             * so an id that is absent from this list is silently dropped
+             * before CartItemNormalizer ever sees it — and the pricer then
+             * rejects the line for a field the client did send. That was the
+             * whole of the 422 on this endpoint: `itemId` and `containerId`
+             * arrived, were stripped here, and came back as "اختر صنفاً من
+             * القائمة".
+             *
+             * Nothing is validated for existence. Whether a slug is real,
+             * available, and belongs to this product is CartPricer's decision
+             * against the live catalog, and it names the offending field.
+             */
+            'items.*.itemId'      => ['nullable', 'string', 'max:100'],
+            'items.*.sizeId'      => ['nullable', 'string', 'max:100'],
+            'items.*.containerId' => ['nullable', 'string', 'max:100'],
+            'items.*.mixId'       => ['nullable', 'string', 'max:100'],
+
+            'items.*.flavorIds'    => ['nullable', 'array', 'max:40'],
+            'items.*.flavorIds.*'  => ['string', 'max:100'],
+            'items.*.mixItemIds'   => ['nullable', 'array', 'max:40'],
+            'items.*.mixItemIds.*' => ['string', 'max:100'],
+
             // Display labels the pricer falls back to when no id was sent.
             'items.*.type'      => ['nullable', 'string', 'max:100'],
             'items.*.container' => ['nullable', 'string', 'max:100'],
@@ -84,6 +111,13 @@ class StoreStorefrontOrderRequest extends FormRequest
             'tableNumber' => ['nullable', 'string', 'max:20'],
 
             'couponCode' => ['nullable', 'string', 'max:40'],
+
+            // What the customer says they will hand the cashier. Anything over
+            // the total becomes wallet credit once the cash is actually taken.
+            // Not checked against the total here: this request has not priced
+            // the cart, and the client's idea of the total is not evidence.
+            // StorefrontOrderService compares it to the figure it priced.
+            'paidAmount' => ['nullable', 'numeric', 'min:0', 'max:100000'],
 
             'pickupTime' => ['nullable', 'date'],
             'notes'      => ['nullable', 'string', 'max:1000'],
@@ -115,6 +149,8 @@ class StoreStorefrontOrderRequest extends FormRequest
             'deliveryMethod.required'       => 'اختر طريقة الاستلام',
             'deliveryMethod.in'             => 'طريقة الاستلام غير مدعومة',
             'jawwalCode.regex'              => 'رمز التأكيد غير صحيح',
+            'paidAmount.numeric'            => 'المبلغ المدفوع غير صحيح',
+            'paidAmount.max'                => 'المبلغ المدفوع كبير جداً',
         ];
     }
 }

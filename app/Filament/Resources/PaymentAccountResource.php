@@ -3,6 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\PaymentAccountResource\Pages;
+use App\Models\Order;
 use App\Models\PaymentAccount;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -11,11 +12,13 @@ use Filament\Tables;
 use Filament\Tables\Table;
 
 /**
- * Where the shop is paid, for the manual-transfer methods (handoff 13).
+ * Where the shop is paid, per method (handoff 13).
  *
- * These are real account numbers that real customers will transfer real money
- * to. The storefront currently ships placeholders that look genuine enough to
- * be paid into — replacing them here is the whole ticket.
+ * For a transfer method these are real account numbers that real customers
+ * will send real money to, and the seeded placeholders ship inactive for that
+ * reason. For a counter method — cash, card, automatic Jawwal Pay — there is
+ * nothing to transfer to, so the transfer section is hidden rather than
+ * demanding an account number that would be a fiction.
  */
 class PaymentAccountResource extends Resource
 {
@@ -60,6 +63,10 @@ class PaymentAccountResource extends Resource
 
             Forms\Components\Section::make('بيانات التحويل')
                 ->description('ما يراه الزبون وينسخه ليحوّل إليه')
+                // Hidden for the counter methods: asking for an account number
+                // to "transfer" cash to invites somebody to invent one, and an
+                // invented number is one a customer could be told to pay into.
+                ->visible(fn (Forms\Get $get) => in_array($get('method'), Order::RECEIPT_METHODS, true))
                 ->schema([
                     Forms\Components\TextInput::make('primary_label')
                         ->label('عنوان الحقل الأساسي')

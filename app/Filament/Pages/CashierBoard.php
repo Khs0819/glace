@@ -10,6 +10,7 @@ use App\Services\Storefront\WalletService;
 use Filament\Forms;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Illuminate\Support\Facades\DB;
 
 /**
  * The counter screen.
@@ -216,12 +217,52 @@ class CashierBoard extends Page
             return;
         }
 
-        $order->update([
-            'payment_status' => Order::STATUS_PAID,
-            'paid_at'        => now(),
-            'paid_by'        => auth()->id(),
-            'shift_id'       => $shift->getKey(),
-        ]);
+        $change = $order->changeDue();
+
+        DB::transaction(function () use ($order, $shift, $change) {
+            $order->update([
+                'payment_status' => Order::STATUS_PAID,
+                'paid_at'        => now(),
+                'paid_by'        => auth()->id(),
+                'shift_id'       => $shift->getKey(),
+            ]);
+
+            if ($change <= 0) {
+                return;
+            }
+
+            // Now, and not a moment earlier: the credit is change from cash
+            // that is in the drawer. Crediting it at checkout would hand out
+            // store credit for money nobody had yet handed over.
+            //
+            // Inside the transaction so the two cannot part company — an order
+            // marked paid without the credit is a customer short of their
+            // change, with nothing to show it was ever owed.
+            app(WalletService::class)->credit(
+                $order->customer,
+                Money::toAgorot($change),
+                'باقي طلب #' . $order->reference,
+                'cash',
+                null,
+                $order,
+            );
+
+            $order->update([
+                'change_credited'    => $change,
+                'change_credited_at' => now(),
+            ]);
+        });
+
+        if ($change > 0) {
+            Notification::make()
+                ->title('تم استلام الدفع')
+                ->body('أُضيف الباقي ' . number_format($change, 2) . ' ₪ إلى محفظة العميل — لا تُعِد نقداً.')
+                ->success()
+                ->persistent()
+                ->send();
+
+            return;
+        }
 
         Notification::make()->title('تم استلام الدفع')->success()->send();
     }

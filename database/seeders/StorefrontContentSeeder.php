@@ -52,10 +52,10 @@ class StorefrontContentSeeder extends Seeder
                 'sort_order'    => 2,
             ],
             [
-                'method'        => 'paypal',
+                'method'        => 'palpay',
                 'holder_name'   => 'جلاسيه الأمير',
-                'primary_label' => 'بريد PayPal',
-                'primary_value' => 'billing@example.com',
+                'primary_label' => 'رقم حساب PalPay',
+                'primary_value' => '0000000000',
                 'sort_order'    => 3,
             ],
         ];

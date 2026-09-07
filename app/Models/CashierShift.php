@@ -87,13 +87,22 @@ class CashierShift extends Model
      *
      * Card, wallet and transfer payments never touch the drawer, so only `cash`
      * counts here — that is the whole distinction the count is checking.
+     *
+     * `change_credited` is added because that money is physically in the
+     * drawer too. A customer who hands over 100 for a 36 order and takes the
+     * 64 as store credit leaves all 100 behind; counting only the order total
+     * would show a 64 surplus at closing and send somebody hunting for an
+     * error that never happened. The shop owes that 64 — but it owes it from
+     * the wallet, not from this drawer.
      */
     public function expectedCashAgorot(): int
     {
-        $cash = $this->orders()
+        $paidCash = $this->orders()
             ->where('payment_status', Order::STATUS_PAID)
-            ->where('payment_method', 'cash')
-            ->sum('total');
+            ->where('payment_method', 'cash');
+
+        $cash   = (clone $paidCash)->sum('total');
+        $change = (clone $paidCash)->sum('change_credited');
 
         // Refunds paid out of the drawer reduce what should be in it.
         $refunded = $this->orders()
@@ -102,6 +111,7 @@ class CashierShift extends Model
 
         return Money::toAgorot($this->opening_float)
             + Money::toAgorot($cash)
+            + Money::toAgorot($change)
             - Money::toAgorot($refunded);
     }
 }

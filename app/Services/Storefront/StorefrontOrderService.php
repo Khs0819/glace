@@ -92,9 +92,13 @@ class StorefrontOrderService
             $this->verifyJawwalCode($payload, $total);
         }
 
+        // 8 ── the note the customer intends to hand over, checked against the
+        //      total this service priced rather than the one the client showed.
+        $tendered = $this->resolveTendered($payload, $customer, $paymentMethod, $total);
+
         return DB::transaction(function () use (
             $payload, $customer, $cart, $address, $coupon, $discount,
-            $deliveryFee, $subtotal, $total, $paymentMethod, $deliveryMethod, $receiptPath
+            $deliveryFee, $subtotal, $total, $paymentMethod, $deliveryMethod, $receiptPath, $tendered
         ) {
             $order = Order::create([
                 'customer_id'     => $customer?->getKey(),
@@ -128,6 +132,10 @@ class StorefrontOrderService
                 'delivery_fee' => Money::toDecimal($deliveryFee),
                 'total'        => Money::toDecimal($total),
                 'currency'     => 'ILS',
+
+                // An intention, not a payment. `change_credited` stays 0 until
+                // the cashier actually takes the cash.
+                'tendered_amount' => $tendered === null ? null : Money::toDecimal($tendered),
 
                 'receipt_image' => $receiptPath,
                 'receipt_note'  => $payload['receiptNote'] ?? null,
@@ -337,6 +345,67 @@ class StorefrontOrderService
             'payment_status' => Order::STATUS_PAID,
             'paid_at'        => now(),
         ]);
+    }
+
+    /**
+     * The amount the customer says they will hand the cashier.
+     *
+     * Returned in agorot, or null when there is nothing to record. Three
+     * refusals, each guarding a way the shop could lose money quietly:
+     *
+     *   Cash only. Change on a card or a bank transfer is not change — it is a
+     *   refund, and it goes back the way it came.
+     *
+     *   Never less than the total. A short payment is not an order that is
+     *   partly paid; it is one the counter cannot settle, and letting it
+     *   through would leave a balance nobody is tracking.
+     *
+     *   Over-payment needs an account. Credit has to land in a wallet, and a
+     *   guest has none — the cashier hands them coins instead.
+     *
+     * @param  array<string, mixed>  $payload
+     *
+     * @throws ValidationException
+     */
+    private function resolveTendered(
+        array $payload,
+        ?Customer $customer,
+        string $paymentMethod,
+        int $total,
+    ): ?int {
+        $raw = $payload['paidAmount'] ?? null;
+
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+
+        $tendered = Money::toAgorot((float) $raw);
+
+        // Handing over exactly the total is the ordinary case and worth
+        // recording, but it is not an over-payment and needs no wallet.
+        if ($tendered === $total) {
+            return $tendered;
+        }
+
+        if ($paymentMethod !== 'cash') {
+            throw ValidationException::withMessages([
+                'paidAmount' => 'المبلغ المدفوع يُسجَّل للدفع النقدي فقط',
+            ]);
+        }
+
+        if ($tendered < $total) {
+            throw ValidationException::withMessages([
+                'paidAmount' => 'المبلغ المدفوع أقل من إجمالي الطلب',
+            ]);
+        }
+
+        if (! $customer) {
+            throw ValidationException::withMessages([
+                'paidAmount' => 'لإضافة الباقي إلى المحفظة يجب تسجيل الدخول',
+            ]);
+        }
+
+        return $tendered;
     }
 
     private function assertMethodsAgree(string $paymentMethod, string $deliveryMethod): void

@@ -53,7 +53,7 @@ it('omits bankName for a wallet rather than sending it empty', function () {
 
 it('hides an account the dashboard has switched off', function () {
     PaymentAccount::create([
-        'method' => 'paypal', 'holder_name' => 'x',
+        'method' => 'palpay', 'holder_name' => 'x',
         'primary_label' => 'y', 'primary_value' => 'z', 'active' => false,
     ]);
 

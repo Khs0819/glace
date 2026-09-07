@@ -26,7 +26,7 @@ class TopUpRequest extends Model
     public const STATUS_REJECTED = 'مرفوض';
 
     /** What the customer may say they paid with. */
-    public const METHODS = ['bop', 'paypal', 'jawwal', 'jawwal-manual'];
+    public const METHODS = ['bop', 'palpay', 'jawwal', 'jawwal-manual'];
 
     protected $fillable = [
         'customer_id', 'amount', 'method', 'status', 'receipt_image',

@@ -343,7 +343,7 @@ it('accepts a note instead of an image', function () {
 });
 
 it('insists on some proof for a manual transfer', function () {
-    test()->post('/api/orders', storefrontPayload(['paymentMethod' => 'paypal']), $this->headers)
+    test()->post('/api/orders', storefrontPayload(['paymentMethod' => 'palpay']), $this->headers)
         ->assertStatus(422)
         ->assertJsonPath('errors.receiptImage.0', 'أرفق صورة إيصال التحويل أو اكتب ملاحظة توضح التحويل');
 });
@@ -656,4 +656,62 @@ it('does not put a table number on an order that is not dine-in', function () {
     ]), $this->headers)
         ->assertCreated()
         ->assertJsonPath('tableNumber', null);
+});
+
+// ─── over-payment at the counter ────────────────────────────────────────────
+
+it('records what the customer intends to hand over, and credits nothing yet', function () {
+    // Cart is 24; they mean to give 50.
+    $response = test()->post('/api/orders', storefrontPayload(['paidAmount' => 50]), $this->headers)
+        ->assertCreated();
+
+    $order = Order::where('reference', $response->json('reference'))->firstOrFail();
+
+    expect((float) $order->tendered_amount)->toBe(50.0)
+        ->and($order->changeDue())->toBe(26.0)
+        // Not a shekel until the cashier has the cash in hand.
+        ->and((float) $order->change_credited)->toBe(0.0);
+});
+
+it('refuses a payment smaller than the total', function () {
+    // Not a partly paid order — one the counter cannot settle, leaving a
+    // balance nobody tracks.
+    test()->post('/api/orders', storefrontPayload(['paidAmount' => 5]), $this->headers)
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('paidAmount');
+});
+
+it('measures the payment against the priced total, not the one the client sent', function () {
+    // Client claims the order is 5 and offers 5. The real total is 24.
+    test()->post('/api/orders', storefrontPayload(['paidAmount' => 5, 'total' => 5]), $this->headers)
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('paidAmount');
+});
+
+it('refuses change on anything but cash', function () {
+    // Change on a transfer is a refund, and it goes back the way it came.
+    test()->post('/api/orders', storefrontPayload([
+        'paidAmount'    => 100,
+        'paymentMethod' => 'jawwal-manual',
+        'receiptNote'   => 'حوّلت المبلغ',
+    ]), $this->headers)
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('paidAmount');
+});
+
+it('refuses over-payment from a guest, who has no wallet to credit', function () {
+    // No headers: a guest. The cashier hands them coins instead.
+    test()->post('/api/orders', storefrontPayload([
+        'paidAmount' => 100,
+        'customer'   => ['name' => 'زائر', 'phone' => '0599000111'],
+    ]))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('paidAmount');
+});
+
+it('accepts the exact total from a guest, because no change is owed', function () {
+    test()->post('/api/orders', storefrontPayload([
+        'paidAmount' => 24,
+        'customer'   => ['name' => 'زائر', 'phone' => '0599000111'],
+    ]))->assertCreated();
 });
