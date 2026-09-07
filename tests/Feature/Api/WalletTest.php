@@ -42,6 +42,47 @@ it('lists the statement newest first', function () {
         ->assertJsonPath('transactions.1.method', 'bop');
 });
 
+it('pages the statement rather than returning every row ever written', function () {
+    foreach (range(1, 25) as $n) {
+        $this->wallet->credit($this->customer, Money::toAgorot($n), "شحن {$n}");
+    }
+
+    $first = test()->getJson('/api/wallet/transactions?page=1&perPage=20', $this->headers)
+        ->assertOk()
+        ->assertJsonPath('total', 25)
+        ->assertJsonPath('totalPages', 2);
+
+    // Both names carry the same rows: `items` is this codebase's pagination
+    // envelope, `transactions` is what GET /wallet calls them.
+    expect($first->json('items'))->toHaveCount(20)
+        ->and($first->json('transactions'))->toBe($first->json('items'));
+
+    test()->getJson('/api/wallet/transactions?page=2&perPage=20', $this->headers)
+        ->assertOk()
+        ->assertJsonCount(5, 'items');
+});
+
+it('caps an oversized page size instead of honouring it', function () {
+    // Otherwise perPage=100000 is a way to make the server do the unbounded
+    // query this endpoint exists to avoid.
+    test()->getJson('/api/wallet/transactions?perPage=5000', $this->headers)
+        ->assertOk()
+        ->assertJsonPath('perPage', 50);
+});
+
+it('does not show one customer the statement of another', function () {
+    $other = Customer::create(['name' => 'سارة', 'phone' => '0598111222']);
+    $this->wallet->credit($other, Money::toAgorot(80), 'شحن');
+
+    test()->getJson('/api/wallet/transactions', $this->headers)
+        ->assertOk()
+        ->assertJsonPath('total', 0);
+});
+
+it('refuses the statement without a token', function () {
+    test()->getJson('/api/wallet/transactions')->assertUnauthorized();
+});
+
 it('keeps one customer wallet away from another', function () {
     $this->wallet->credit($this->customer, Money::toAgorot(50), 'شحن');
 

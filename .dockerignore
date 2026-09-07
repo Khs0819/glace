@@ -1,0 +1,32 @@
+# Built inside the image, and copying the host's copy in first makes the build
+# slower and the result depend on whatever the last developer had installed.
+node_modules
+vendor
+public/build
+public/hot
+
+# Never bake secrets into an image. Configuration comes from the container
+# environment; a .env copied in here would also silently outrank it for any
+# key the environment does not set.
+.env
+.env.*
+!.env.example
+
+# Uploaded media and logs belong on a volume, not in the image. Without this,
+# every rebuild ships a snapshot of whatever the build machine happened to
+# have — and overwrites the volume's seed with it.
+storage/app/public/*
+!storage/app/public/.gitignore
+storage/logs/*
+!storage/logs/.gitignore
+storage/framework/cache/data/*
+storage/framework/sessions/*
+storage/framework/views/*
+
+.git
+.github
+tests
+docs
+*.zip
+*.md
+!README.md

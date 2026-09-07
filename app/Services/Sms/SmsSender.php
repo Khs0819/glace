@@ -104,9 +104,13 @@ class SmsSender
     private function logOnly(string $number, string $message): void
     {
         if (app()->environment('production')) {
+            // Name the driver that actually works. Pointing at smpp here sent
+            // whoever read this log to a port that is firewalled off, while
+            // the HTTP gateway on the same account was up the whole time.
             throw new RuntimeException(
                 'SMS_DRIVER is "log" in production — one-time codes would never reach customers. '
-                . 'Configure a real gateway (SMS_DRIVER=smpp or rest) before going live.',
+                . 'Set SMS_DRIVER=hotsms with SMS_API_URL, SMS_API_USERNAME, SMS_API_PASSWORD and '
+                . 'SMS_SENDER, then run `php artisan config:clear && php artisan sms:check`.',
             );
         }
 

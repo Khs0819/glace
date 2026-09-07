@@ -143,6 +143,7 @@ Route::post('/cart/apply-coupon', [CouponController::class, 'apply'])
 Route::middleware('customer')->prefix('wallet')->group(function () {
     Route::get('/', [WalletController::class, 'show']);
     Route::post('/deduct', [WalletController::class, 'deduct']);
+    Route::get('/transactions', [WalletController::class, 'transactions']);
     Route::get('/topup-requests', [WalletController::class, 'topUpRequests']);
     Route::post('/topup-requests', [WalletController::class, 'storeTopUpRequest'])->middleware('throttle:20,1');
 });

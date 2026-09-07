@@ -106,7 +106,14 @@ class SmsCheck extends Command
             : (int) $credits));
 
         $this->newLine();
-        $this->comment('  The sender name must be one the account has approved, or the send is refused with 6000.');
+        // Said plainly, because a green balance reads like a green light and
+        // is not one. Sending is gated by a separate account switch, and a
+        // balance read does not touch it — the first proof that sending works
+        // is a send.
+        $this->comment('  A balance does NOT prove sending works. Two account settings gate that:');
+        $this->comment('    · API sending must be enabled in the portal (Security tools), or the send returns 15000.');
+        $this->comment('    · The sender name must be one the account has approved, or it returns 6000.');
+        $this->comment('  Only --to=05XXXXXXXX exercises either of them.');
     }
 
     private function reportSmpp(): void

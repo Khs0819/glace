@@ -38,6 +38,40 @@ class WalletController extends Controller
         ]);
     }
 
+    /**
+     * The statement, paginated.
+     *
+     * `GET /wallet` carries the same rows inline, which is fine for a wallet a
+     * week old and not for one two years old — it loads every row ever written
+     * to render a balance. This is the endpoint the history screen should use,
+     * and the one the storefront was already calling.
+     */
+    public function transactions(Request $request): JsonResponse
+    {
+        $perPage = min(50, max(1, (int) $request->integer('perPage', 20)));
+
+        $transactions = $this->wallet->walletFor($request->user())
+            ->transactions()
+            ->paginate($perPage, ['*'], 'page', max(1, (int) $request->integer('page', 1)));
+
+        $rows = collect($transactions->items())->map($this->transaction(...))->values();
+
+        return response()->json([
+            // Two keys, one list. `items` is this codebase's pagination
+            // envelope; `transactions` is what GET /wallet calls the same rows,
+            // and the storefront reads that name there. The contract never
+            // specified this endpoint, so until the frontend says which it
+            // wants, answering to both costs nothing and a wrong guess costs a
+            // release.
+            'items'        => $rows,
+            'transactions' => $rows,
+            'total'        => $transactions->total(),
+            'page'         => $transactions->currentPage(),
+            'perPage'      => $transactions->perPage(),
+            'totalPages'   => $transactions->lastPage(),
+        ]);
+    }
+
     public function topUpRequests(Request $request): JsonResponse
     {
         return response()->json([
