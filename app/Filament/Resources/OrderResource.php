@@ -7,6 +7,7 @@ use App\Filament\Resources\OrderResource\RelationManagers;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Services\Checkout\Money;
+use App\Services\Storefront\OrderRefundService;
 use App\Services\Storefront\WalletService;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -19,6 +20,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
+use RuntimeException;
 
 /**
  * Orders come in from the storefront, priced and snapshotted. Nothing here
@@ -244,6 +246,21 @@ class OrderResource extends Resource
                     ->suffix(' ₪')
                     ->sortable()
                     ->weight(\Filament\Support\Enums\FontWeight::SemiBold),
+
+                // Shown beside the total, because an order can read "مسترد"
+                // while the books still count it as a completed sale — and the
+                // only way to see that from the list is the amount itself.
+                Tables\Columns\TextColumn::make('refunded_amount')
+                    ->label('المسترد')
+                    ->suffix(' ₪')
+                    ->sortable()
+                    ->color('danger')
+                    ->description(fn (Order $record) => $record->refunded_at
+                        ? ($record->refund_method === Order::REFUND_CASH ? 'نقداً' : 'للمحفظة')
+                        : null)
+                    ->placeholder('—')
+                    ->formatStateUsing(fn ($state) => (float) $state > 0 ? $state : null)
+                    ->toggleable(),
                 // The first question anyone asks of a docket: where does it go?
                 Tables\Columns\TextColumn::make('delivery_method')
                     ->label('القناة')
@@ -414,22 +431,40 @@ class OrderResource extends Resource
                     ->requiresConfirmation()
                     ->modalHeading('استرداد قيمة الطلب')
                     ->modalDescription(fn (Order $record) => "سيُضاف {$record->total} ₪ إلى رصيد الزبون وتتحول حالة الطلب إلى «مسترد».")
-                    ->visible(fn (Order $record) => $record->customer_id !== null
-                        && $record->status !== Order::FULFILMENT_REFUNDED
-                        && $record->total > 0)
+                    ->visible(fn (Order $record) => $record->refundable() && $record->customer_id !== null)
                     ->action(function (Order $record) {
-                        app(WalletService::class)->credit(
-                            $record->customer,
-                            Money::toAgorot($record->total),
-                            'استرداد طلب #' . $record->reference,
-                            'wallet',
-                            null,
-                            $record,
-                        );
+                        try {
+                            app(OrderRefundService::class)->toWallet($record);
+                        } catch (RuntimeException $e) {
+                            Notification::make()->title($e->getMessage())->danger()->send();
 
-                        $record->update(['status' => Order::FULFILMENT_REFUNDED]);
+                            return;
+                        }
 
                         Notification::make()->title('تم الاسترداد إلى محفظة الزبون')->success()->send();
+                    }),
+
+                // The other half of the same decision. Kept apart from the
+                // wallet refund because the two do opposite things to the
+                // till, and the books have to be able to tell them apart.
+                Tables\Actions\Action::make('refundInCash')
+                    ->label('استرداد نقداً')
+                    ->icon('heroicon-o-banknotes')
+                    ->color('warning')
+                    ->requiresConfirmation()
+                    ->modalHeading('استرداد نقدي')
+                    ->modalDescription(fn (Order $record) => "سيُسجَّل خروج {$record->total} ₪ من الدرج وتتحول حالة الطلب إلى «مسترد».")
+                    ->visible(fn (Order $record) => $record->refundable())
+                    ->action(function (Order $record) {
+                        try {
+                            app(OrderRefundService::class)->inCash($record);
+                        } catch (RuntimeException $e) {
+                            Notification::make()->title($e->getMessage())->danger()->send();
+
+                            return;
+                        }
+
+                        Notification::make()->title('سُجّل الاسترداد النقدي')->success()->send();
                     }),
 
                 Tables\Actions\Action::make('cancel')

@@ -104,9 +104,22 @@ class CashierShift extends Model
         $cash   = (clone $paidCash)->sum('total');
         $change = (clone $paidCash)->sum('change_credited');
 
-        // Refunds paid out of the drawer reduce what should be in it.
+        /*
+         * Only refunds actually handed back in notes reduce the drawer.
+         *
+         * An order refunded as store credit moved onto the customer's balance
+         * and took nothing out of the till, so subtracting it would report a
+         * surplus that is really just the money still sitting there — and send
+         * somebody looking for an error that never happened.
+         *
+         * Rows refunded before `refund_method` existed are read as cash, which
+         * is what the old code assumed.
+         */
         $refunded = $this->orders()
             ->where('payment_method', 'cash')
+            ->where(fn ($query) => $query
+                ->whereNull('refund_method')
+                ->orWhere('refund_method', Order::REFUND_CASH))
             ->sum('refunded_amount');
 
         return Money::toAgorot($this->opening_float)

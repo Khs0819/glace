@@ -12,7 +12,6 @@ use App\Services\Storefront\WalletService;
 use App\Support\MediaUrl;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use RuntimeException;
 
 /**
  * Store credit (handoff 14).
@@ -94,9 +93,25 @@ class WalletController extends Controller
     }
 
     /**
-     * Spend credit. Kept because handoff 14 specifies it, but an order paid
-     * with `wallet` debits inside order creation instead — one transaction, so
-     * a debit can never succeed against an order that then fails to save.
+     * Check the balance covers an amount. **This no longer moves money.**
+     *
+     * It used to, and that cost a real customer real credit. An order paid
+     * with `wallet` is debited inside order creation — in the same database
+     * transaction as the order row, so the two can never part company. A
+     * storefront that called this first and then created the order was
+     * therefore charging twice on success, and once for nothing whenever the
+     * order failed after the debit went through. The second is what happened:
+     * credit taken, no order, refunded by hand from the dashboard.
+     *
+     * Making it a check rather than deleting it keeps that storefront working
+     * unchanged — it calls this, sees success, creates the order, and is
+     * debited exactly once — while removing every way for money to move
+     * without an order attached to it. There is no legitimate reason for a
+     * client to spend credit outside a purchase, so the capability is gone
+     * rather than guarded.
+     *
+     * 409 when the balance is short, matching what the old debit answered, so
+     * a caller's existing error branch still fires at the same moment.
      */
     public function deduct(Request $request): JsonResponse
     {
@@ -107,19 +122,19 @@ class WalletController extends Controller
             'amount.required' => 'المبلغ مطلوب',
         ]);
 
-        try {
-            $this->wallet->debit(
-                $request->user(),
-                Money::toAgorot($data['amount']),
-                $data['label'] ?? 'خصم من الرصيد',
-            );
-        } catch (RuntimeException $e) {
-            // 409, not 422: the request was valid, the balance simply is not.
-            return response()->json(['message' => $e->getMessage()], 409);
+        $wallet  = $this->wallet->walletFor($request->user());
+        $balance = Money::toAgorot($wallet->balance);
+        $amount  = Money::toAgorot($data['amount']);
+
+        if ($balance < $amount) {
+            // Advisory only: the balance is checked again under a row lock
+            // when the order is created, which is the check that decides.
+            return response()->json(['message' => 'الرصيد غير كافٍ'], 409);
         }
 
         return response()->json([
-            'balance' => $this->wallet->walletFor($request->user())->fresh()->balance,
+            'balance'    => $wallet->balance,
+            'sufficient' => true,
         ]);
     }
 

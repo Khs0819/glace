@@ -6,11 +6,13 @@ use App\Models\CashierShift;
 use App\Models\Order;
 use App\Services\Checkout\Money;
 use App\Services\Printing\ReceiptPrinter;
+use App\Services\Storefront\OrderRefundService;
 use App\Services\Storefront\WalletService;
 use Filament\Forms;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
 /**
  * The counter screen.
@@ -331,20 +333,13 @@ class CashierBoard extends Page
             return;
         }
 
-        app(WalletService::class)->credit(
-            $order->customer,
-            Money::toAgorot($order->total),
-            'استرداد طلب #' . $order->reference,
-            'wallet',
-            null,
-            $order,
-        );
+        try {
+            app(OrderRefundService::class)->toWallet($order);
+        } catch (RuntimeException $e) {
+            Notification::make()->title($e->getMessage())->danger()->send();
 
-        $order->update([
-            'status'          => Order::FULFILMENT_REFUNDED,
-            'refunded_amount' => $order->total,
-            'refunded_at'     => now(),
-        ]);
+            return;
+        }
 
         Notification::make()->title('تم الاسترداد إلى محفظة الزبون')->success()->send();
     }

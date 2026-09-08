@@ -196,11 +196,28 @@ it('refunds to the wallet only when someone decides to', function () {
         ->and($order->fresh()->status)->toBe(Order::FULFILMENT_REFUNDED);
 });
 
-it('does not offer a second refund on an order already refunded', function () {
+it('does not offer a second refund once the money has actually gone back', function () {
+    $order = storefrontOrder([
+        'status'          => Order::FULFILMENT_REFUNDED,
+        'refunded_amount' => 30,
+        'refunded_at'     => now(),
+        'refund_method'   => Order::REFUND_WALLET,
+    ]);
+
+    Livewire::test(App\Filament\Resources\OrderResource\Pages\ListOrders::class)
+        ->assertTableActionHidden('refundToWallet', $order)
+        ->assertTableActionHidden('refundInCash', $order);
+});
+
+it('still offers the refund on an order only labelled refunded', function () {
+    // The status used to be settable without any money moving, which left
+    // rows reading "مسترد" that the books still counted as completed sales.
+    // Offering the action is how one of those gets finished rather than
+    // quietly staying broken.
     $order = storefrontOrder(['status' => Order::FULFILMENT_REFUNDED]);
 
     Livewire::test(App\Filament\Resources\OrderResource\Pages\ListOrders::class)
-        ->assertTableActionHidden('refundToWallet', $order);
+        ->assertTableActionVisible('refundToWallet', $order);
 });
 
 // ─── content ────────────────────────────────────────────────────────────────

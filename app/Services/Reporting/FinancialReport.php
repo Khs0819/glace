@@ -207,6 +207,19 @@ class FinancialReport
 
             'refundedOrders' => (clone $refunded)->count(),
             'refundedTotal'  => round((float) (clone $refunded)->sum('refunded_amount'), 2),
+
+            // Split by destination, because the two reconcile against
+            // different things: cash left the building, store credit only
+            // moved from "sale" to "we owe them" and still shows up under
+            // deposits.outstanding.
+            'refundedInCash'   => round((float) (clone $refunded)
+                ->where(fn ($query) => $query
+                    ->whereNull('refund_method')
+                    ->orWhere('refund_method', Order::REFUND_CASH))
+                ->sum('refunded_amount'), 2),
+            'refundedToWallet' => round((float) (clone $refunded)
+                ->where('refund_method', Order::REFUND_WALLET)
+                ->sum('refunded_amount'), 2),
         ];
     }
 

@@ -95,7 +95,7 @@ class Order extends Model
         'preparation_time', 'estimated_delivery_time', 'driver', 'driver_assigned_at',
         'scheduled_for', 'cancel_reason', 'cancelled_at', 'received_at', 'delivered_at', 'paid_at',
         'table_number', 'printed_at', 'print_count', 'print_error',
-        'paid_by', 'shift_id', 'refunded_amount', 'refunded_at',
+        'paid_by', 'shift_id', 'refunded_amount', 'refunded_at', 'refund_method',
         'tendered_amount', 'change_credited', 'change_credited_at',
     ];
 
@@ -303,5 +303,25 @@ class Order extends Model
     public function changePending(): bool
     {
         return $this->changeDue() > 0 && $this->change_credited_at === null;
+    }
+
+    /** Refunded as store credit rather than handed back in notes. */
+    public const REFUND_WALLET = 'wallet';
+    public const REFUND_CASH   = 'cash';
+
+    public function isRefunded(): bool
+    {
+        return $this->refunded_at !== null;
+    }
+
+    /**
+     * Whether this order can still be refunded.
+     *
+     * Wallet refunds need somebody to credit, and there is nothing to return
+     * on an order that was never paid.
+     */
+    public function refundable(): bool
+    {
+        return $this->total > 0 && ! $this->isRefunded();
     }
 }

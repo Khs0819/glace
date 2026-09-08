@@ -101,12 +101,19 @@ it('requires a token everywhere in the wallet', function () {
 
 // ─── spending ───────────────────────────────────────────────────────────────
 
-it('deducts from the balance', function () {
+it('checks the balance without spending it', function () {
     $this->wallet->credit($this->customer, Money::toAgorot(100), 'شحن');
 
     test()->postJson('/api/wallet/deduct', ['amount' => 22.5, 'label' => 'دفع طلب #ORD-M3K2'], $this->headers)
         ->assertOk()
-        ->assertJsonPath('balance', 77.5);
+        ->assertJsonPath('balance', fn ($v) => (float) $v === 100.0)
+        ->assertJsonPath('sufficient', true);
+
+    // This endpoint used to move the money, and an order that then failed to
+    // save left the customer short with nothing to show it was owed. Spending
+    // happens inside order creation now, in the same transaction as the order
+    // row — see WalletCheckoutTest.
+    expect($this->customer->wallet->fresh()->balance)->toBe(100.0);
 });
 
 it('refuses a deduction the balance cannot cover', function () {
