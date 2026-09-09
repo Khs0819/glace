@@ -73,17 +73,22 @@ it('marks a reprint as a duplicate on the paper', function () {
         ->assertSee('نسخة مُعادة', false);
 });
 
-it('lists live orders for the cashier screen', function () {
+it('lists orders for the cashier screen, finished ones included', function () {
     $this->actingAs(User::factory()->create());
     routeOrder();
     routeOrder(['reference' => 'ORD-DONE01', 'status' => Order::FULFILMENT_RECEIVED]);
 
     $response = $this->getJson(route('receipts.queue'))->assertOk();
 
-    // Finished orders are not the counter's problem any more.
-    expect($response->json('orders'))->toHaveCount(1)
-        ->and($response->json('orders.0.reference'))->toBe('ORD-PRINT1')
-        ->and($response->json('orders.0.tableNumber'))->toBe('7');
+    // The screen filters in the browser, so an order the feed leaves out
+    // cannot be searched for there at all — and the counter looks up a
+    // finished order as often as it works on a live one. `final` is what the
+    // status chips read to tell them apart.
+    expect($response->json('orders'))->toHaveCount(2)
+        ->and($response->json('orders.1.reference'))->toBe('ORD-PRINT1')
+        ->and($response->json('orders.1.tableNumber'))->toBe('7')
+        ->and(collect($response->json('orders'))->firstWhere('reference', 'ORD-DONE01')['final'])
+        ->toBeTrue();
 });
 
 it('serves the receipt at both paper widths', function () {

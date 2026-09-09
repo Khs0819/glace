@@ -87,8 +87,22 @@ class OrderResource extends JsonResource
             'preparationTime'       => $this->preparation_time,
             'estimatedDeliveryTime' => $this->estimated_delivery_time,
 
+            /*
+             * The driver, name and phone, so the customer can ring the person
+             * actually holding their order instead of the shop.
+             *
+             * The snapshot on the order, not the live record: a driver renamed
+             * or removed next month must not change what this delivery said.
+             */
             'driver'           => $this->driver,
             'driverAssignedAt' => $this->driver_assigned_at?->toIso8601String(),
+
+            // Which of the shop's accounts the transfer went to — the customer
+            // sees the same name they typed it into.
+            'paidToAccount'    => $this->whenLoaded(
+                'paymentAccount',
+                fn () => $this->paymentAccount?->holder_name,
+            ),
 
             'scheduledFor' => $this->scheduled_for?->toIso8601String(),
             'cancelReason' => $this->cancel_reason,

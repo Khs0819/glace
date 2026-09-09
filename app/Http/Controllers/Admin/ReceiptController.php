@@ -57,11 +57,18 @@ class ReceiptController extends Controller
     {
         $since = now()->subHours((int) config('storefront.cashier.lookback_hours', 12));
 
-        $orders = Order::with('items')
+        /*
+         * Closed orders are included, not filtered out.
+         *
+         * The counter needs to look one up as often as it needs to work on
+         * one — "did that delivery go out?", a reprint, a customer back at the
+         * till. They arrive already printed, so auto-print skips them on its
+         * own and no docket comes out twice.
+         */
+        $orders = Order::with(['items', 'paymentAccount'])
             ->where('created_at', '>=', $since)
-            ->whereNotIn('status', Order::FINAL_STATUSES)
             ->latest('created_at')
-            ->limit(50)
+            ->limit(120)
             ->get();
 
         return response()->json([
@@ -81,6 +88,20 @@ class ReceiptController extends Controller
                 'area'           => $order->address['area'] ?? null,
                 'total'          => $order->total,
                 'itemCount'      => $order->items->sum('quantity'),
+
+                // Which of the shop's accounts the transfer landed in. The
+                // method alone does not say which one to go and check.
+                'paidToAccount'  => $order->paymentAccount?->holder_name,
+
+                // Frozen on the order, so it still reads correctly for a
+                // driver who has since been renamed or removed.
+                'driver'         => $order->driver ? [
+                    'name'    => $order->driver['name'] ?? null,
+                    'phone'   => $order->driver['phone'] ?? null,
+                    'company' => $order->driver['company'] ?? null,
+                ] : null,
+                'needsDriver'    => $order->delivery_method === 'delivery' && $order->driver_id === null,
+                'final'          => $order->isFinal(),
                 'createdAt'      => $order->created_at?->toIso8601String(),
                 // The screen prints exactly those the printer did not get.
                 'printed'        => $order->printed(),

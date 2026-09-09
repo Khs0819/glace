@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Models\CashierShift;
+use App\Models\Driver;
 use App\Models\Order;
 use App\Services\Checkout\Money;
 use App\Services\Printing\ReceiptPrinter;
@@ -280,6 +281,19 @@ class CashierBoard extends Page
             return;
         }
 
+        // Guarded here rather than only in the button that hides it: "في
+        // الطريق" with nobody named is a delivery the shop cannot answer a
+        // question about, and the screen is not the only way to reach this.
+        if ($status === Order::FULFILMENT_ON_WAY && ! $order->canGoOnTheRoad()) {
+            Notification::make()
+                ->title('عيّن سائقاً أولاً')
+                ->body('لا يمكن وضع طلب توصيل «في الطريق» بدون سائق — العميل سيسأل عن طلبه ولن يكون لدينا جواب.')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
         $order->update(array_filter([
             'status'       => $status,
             'delivered_at' => $status === Order::FULFILMENT_DELIVERED ? now() : $order->delivered_at,
@@ -288,6 +302,66 @@ class CashierBoard extends Page
         ], fn ($value) => $value !== null));
 
         Notification::make()->title('تم تحديث الحالة')->success()->send();
+    }
+
+    /** Drivers the cashier can hand this order to, busiest state included. */
+    public function drivers(): array
+    {
+        return Driver::active()
+            ->withExists(['activeOrders as busy'])
+            ->orderBy('busy')          // free hands first
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Driver $driver) => [
+                'id'      => $driver->getKey(),
+                'name'    => $driver->name,
+                'company' => $driver->company,
+                'phone'   => $driver->phone,
+                'busy'    => (bool) $driver->busy,
+                'status'  => $driver->busy ? 'في توصيل' : 'متاح',
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Hand a delivery to a driver, and put it on the road in the same breath.
+     *
+     * One action rather than two, because the two always happen together at
+     * the counter — the driver is standing there — and splitting them is how
+     * an order ends up assigned but never marked as gone.
+     */
+    public function assignDriver(string $reference, int $driverId): void
+    {
+        $order  = Order::where('reference', $reference)->firstOrFail();
+        $driver = Driver::active()->find($driverId);
+
+        if ($order->delivery_method !== 'delivery') {
+            Notification::make()->title('هذا الطلب ليس توصيلاً')->warning()->send();
+
+            return;
+        }
+
+        if (! $driver) {
+            Notification::make()->title('السائق غير موجود أو غير مفعّل')->danger()->send();
+
+            return;
+        }
+
+        $order->update([
+            'driver_id'          => $driver->getKey(),
+            // Frozen alongside the link: renaming a driver next month must not
+            // rewrite what this delivery said today.
+            'driver'             => $driver->snapshot(),
+            'driver_assigned_at' => now(),
+            'status'             => Order::FULFILMENT_ON_WAY,
+        ]);
+
+        Notification::make()
+            ->title('في الطريق مع ' . $driver->name)
+            ->body($driver->phone)
+            ->success()
+            ->send();
     }
 
     /** Seat a dine-in order that arrived without a table. */

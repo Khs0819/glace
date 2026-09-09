@@ -164,3 +164,45 @@ it('honours an explicit container id, which used to be discarded', function () {
 
     expect((float) $response->json('total'))->toBe(30.0);
 });
+
+// ─── which account was paid ─────────────────────────────────────────────────
+
+it('records the shop account a transfer was made to', function () {
+    $account = App\Models\PaymentAccount::create([
+        'method' => 'jawwal-manual', 'holder_name' => 'يوسف عماد',
+        'primary_label' => 'رقم جوال باي', 'primary_value' => '0599000111', 'active' => true,
+    ]);
+
+    $response = postBrowserCart(browserLine(), [
+        'paymentMethod'    => 'jawwal-manual',
+        'receiptNote'      => 'حوّلت المبلغ',
+        'paymentAccountId' => $account->getKey(),
+    ])->assertCreated();
+
+    expect(Order::where('reference', $response->json('reference'))->first()->payment_account_id)
+        ->toBe($account->getKey());
+});
+
+it('refuses an account that belongs to a different payment method', function () {
+    // A Jawwal Pay receipt filed against the bank account sends whoever
+    // verifies it to the wrong statement, where they find nothing.
+    $bank = App\Models\PaymentAccount::create([
+        'method' => 'bop', 'holder_name' => 'جلاسيه الأمير',
+        'primary_label' => 'رقم الحساب', 'primary_value' => '123', 'active' => true,
+    ]);
+
+    postBrowserCart(browserLine(), [
+        'paymentMethod'    => 'jawwal-manual',
+        'receiptNote'      => 'حوّلت المبلغ',
+        'paymentAccountId' => $bank->getKey(),
+    ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('paymentAccountId');
+});
+
+it('accepts an order with no account named, as before', function () {
+    postBrowserCart(browserLine(), [
+        'paymentMethod' => 'jawwal-manual',
+        'receiptNote'   => 'حوّلت المبلغ',
+    ])->assertCreated();
+});

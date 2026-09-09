@@ -89,3 +89,48 @@ it('credits a never-refunded row when explicitly asked', function () {
 it('says nothing is wrong when every refund is recorded', function () {
     $this->artisan('orders:repair-refunds')->assertSuccessful();
 });
+
+// ─── mislabelled, not refunded ──────────────────────────────────────────────
+
+it('puts a mislabelled order back in its real status', function () {
+    $order = labelledRefund();
+
+    // Array form, not a command string: the Arabic statuses contain spaces
+    // and argv splitting would tear them in half.
+    $this->artisan('orders:repair-refunds', ['--fix' => true, '--clear' => Order::FULFILMENT_DELIVERED])
+        ->assertSuccessful();
+
+    $order = $order->fresh();
+
+    expect($order->status)->toBe(Order::FULFILMENT_DELIVERED)
+        ->and($order->refunded_at)->toBeNull()
+        ->and((float) $order->refunded_amount)->toBe(0.0)
+        // Nothing was owed, so nothing is paid.
+        ->and(app(WalletService::class)->walletFor($order->customer)->fresh()->balance)->toBe(0.0);
+});
+
+it('refuses a status that does not belong to the order\'s own ladder', function () {
+    // "في الطريق" is a delivery state and means nothing on a dine-in order.
+    $order = labelledRefund();
+
+    $this->artisan('orders:repair-refunds', ['--fix' => true, '--clear' => Order::FULFILMENT_ON_WAY])
+        ->assertExitCode(1);
+
+    expect($order->fresh()->status)->toBe(Order::FULFILMENT_REFUNDED);
+});
+
+it('never clears a refund that actually happened', function () {
+    $order = labelledRefund();
+
+    app(WalletService::class)->credit(
+        $order->customer, Money::toAgorot(12), 'استرداد', 'wallet', null, $order,
+    );
+    $order->update(['refunded_amount' => 12, 'refunded_at' => now()]);
+
+    // It is no longer in the broken set at all, so --clear cannot reach it.
+    $this->artisan('orders:repair-refunds', ['--fix' => true, '--clear' => Order::FULFILMENT_DELIVERED])
+        ->assertSuccessful();
+
+    expect($order->fresh()->status)->toBe(Order::FULFILMENT_REFUNDED)
+        ->and((float) $order->fresh()->refunded_amount)->toBe(12.0);
+});

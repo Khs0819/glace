@@ -134,6 +134,13 @@ class StoreStorefrontOrderRequest extends FormRequest
 
             'couponCode' => ['nullable', 'string', 'max:40'],
 
+            // Which of the shop's accounts the customer transferred to. Only
+            // meaningful for the manual methods, and checked against the
+            // method by StorefrontOrderService — a Jawwal Pay receipt filed
+            // against the bank account sends the shop looking in the wrong
+            // place.
+            'paymentAccountId' => ['nullable', 'integer'],
+
             // What the customer says they will hand the cashier. Anything over
             // the total becomes wallet credit once the cash is actually taken.
             // Not checked against the total here: this request has not priced

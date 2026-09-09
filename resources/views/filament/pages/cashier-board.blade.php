@@ -72,7 +72,7 @@
                 </span>
                 <span class="text-sm text-gray-500">
                     تحديث تلقائي كل <span x-text="poll"></span> ثانية ·
-                    <span x-text="orders.length"></span> طلب
+                    <span x-text="visible().length"></span> من <span x-text="orders.length"></span> طلب
                 </span>
             </div>
 
@@ -82,14 +82,66 @@
             </label>
         </div>
 
-        <template x-if="orders.length === 0">
+        {{-- Filters.
+
+             Everything the counter needs is already in memory, so these are
+             applied here rather than by asking the server again: the list
+             redraws as fast as the chip is clicked, which is the whole point
+             of a screen someone uses with a queue in front of them.
+
+             Counts respect the OTHER active filters, so a chip showing 3
+             really does yield 3 — a count that ignored them would invite
+             clicks that land on an empty list. --}}
+        <div class="mb-3 space-y-2">
+            <div class="flex items-center gap-2">
+                <input
+                    type="search"
+                    x-model="search"
+                    placeholder="ابحث برقم الطلب أو الهاتف أو اسم الزبون…"
+                    class="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900 text-sm"
+                >
+                <template x-if="isFiltered()">
+                    <button
+                        class="shrink-0 rounded-lg border border-rose-300 px-3 py-2 text-sm font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950"
+                        @click="clearFilters()"
+                    >مسح الفلاتر</button>
+                </template>
+            </div>
+
+            <template x-for="group in filterGroups" :key="group.key">
+                <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="text-xs text-gray-500 w-20 shrink-0" x-text="group.label"></span>
+                    <template x-for="option in group.options" :key="option.value">
+                        <button
+                            class="rounded-full border px-3 py-1 text-xs font-bold transition"
+                            :class="filters[group.key] === option.value
+                                ? 'border-primary-600 bg-primary-600 text-white'
+                                : 'border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'"
+                            @click="filters[group.key] = option.value"
+                        >
+                            <span x-text="option.label"></span>
+                            <span
+                                class="ms-1 rounded-full px-1.5"
+                                :class="filters[group.key] === option.value ? 'bg-white/25' : 'bg-gray-200 dark:bg-gray-700'"
+                                x-text="count(group.key, option.value)"
+                            ></span>
+                        </button>
+                    </template>
+                </div>
+            </template>
+        </div>
+
+        <template x-if="visible().length === 0">
             <x-filament::section>
-                <div class="text-center py-8 text-gray-500">لا توجد طلبات قيد التنفيذ</div>
+                <div class="text-center py-8 text-gray-500">
+                    <span x-show="orders.length === 0">لا توجد طلبات</span>
+                    <span x-show="orders.length > 0">لا يوجد طلب يطابق الفلاتر المختارة</span>
+                </div>
             </x-filament::section>
         </template>
 
         <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <template x-for="order in orders" :key="order.reference">
+            <template x-for="order in visible()" :key="order.reference">
                 <div
                     class="rounded-xl border-2 bg-white dark:bg-gray-900 p-4 shadow-sm"
                     :class="{
@@ -152,7 +204,36 @@
                                 ></span>
                             </span>
                         </div>
+
+                        {{-- Which account the transfer landed in. "Paid by
+                             Jawwal Pay" does not say which of the shop's
+                             numbers to go and check. --}}
+                        <template x-if="order.paidToAccount">
+                            <div class="flex justify-between">
+                                <span class="text-gray-500">تم عبر حساب</span>
+                                <span class="font-semibold" x-text="order.paidToAccount"></span>
+                            </div>
+                        </template>
                     </div>
+
+                    {{-- The driver, once there is one: the answer to "where is
+                         my order", available without leaving this screen. --}}
+                    <template x-if="order.driver">
+                        <div class="mt-3 rounded-lg bg-sky-50 dark:bg-sky-950/40 p-2 text-sm">
+                            <div class="font-bold text-sky-700 dark:text-sky-300">🚗 السائق</div>
+                            <div class="flex justify-between mt-1">
+                                <span x-text="order.driver.name"></span>
+                                <a
+                                    class="font-semibold underline"
+                                    :href="'tel:' + order.driver.phone"
+                                    x-text="order.driver.phone"
+                                ></a>
+                            </div>
+                            <template x-if="order.driver.company">
+                                <div class="text-xs text-gray-500" x-text="order.driver.company"></div>
+                            </template>
+                        </div>
+                    </template>
 
                     {{-- Table number: shown for dine-in, and settable right here
                          when the order arrived without one. --}}
@@ -199,6 +280,17 @@
                             >استلام الدفع</button>
                         </template>
 
+                        {{-- Assigning and dispatching are one button because
+                             at the counter they are one moment: the driver is
+                             standing there. Two buttons is how an order ends
+                             up assigned but never marked as gone. --}}
+                        <template x-if="order.needsDriver && !order.final">
+                            <button
+                                class="rounded-lg bg-sky-600 px-3 py-2 text-sm font-bold text-white hover:bg-sky-500"
+                                @click="assignDriver(order)"
+                            >تعيين السائق</button>
+                        </template>
+
                         <button
                             class="rounded-lg border border-gray-300 px-3 py-2 text-sm font-bold hover:bg-gray-50 dark:hover:bg-gray-800"
                             @click="advance(order)"
@@ -214,6 +306,47 @@
         function cashierBoard(config) {
             return {
                 orders: [],
+                search: '',
+                filters: { status: 'all', channel: 'all', payment: 'all' },
+
+                // Grouped rather than one chip per raw status: the counter
+                // thinks in "ready" and "done", not in the four different
+                // words the three fulfilment ladders end with.
+                statusGroups: {
+                    new:       ['قيد المراجعة'],
+                    preparing: ['جاري التحضير'],
+                    ready:     ['جاهز للاستلام', 'في الطريق'],
+                    done:      ['تم التسليم', 'تم الاستلام'],
+                    closed:    ['ملغي', 'مسترد'],
+                },
+
+                filterGroups: [
+                    { key: 'status', label: 'الحالة', options: [
+                        { value: 'all',       label: 'الكل' },
+                        { value: 'new',       label: 'جديد' },
+                        { value: 'preparing', label: 'قيد التحضير' },
+                        { value: 'ready',     label: 'جاهز' },
+                        { value: 'done',      label: 'مكتمل' },
+                        { value: 'closed',    label: 'ملغي / مسترد' },
+                    ]},
+                    { key: 'channel', label: 'الاستلام', options: [
+                        { value: 'all',      label: 'الكل' },
+                        { value: 'dine-in',  label: '🍦 تناول الآن' },
+                        { value: 'pickup',   label: '🏪 استلام' },
+                        { value: 'delivery', label: '🚗 توصيل' },
+                    ]},
+                    { key: 'payment', label: 'الدفع', options: [
+                        { value: 'all',           label: 'الكل' },
+                        { value: 'cash',          label: '💵 كاش' },
+                        { value: 'visa',          label: '💳 فيزا' },
+                        { value: 'jawwal',        label: '📱 جوال باي' },
+                        { value: 'jawwal-manual', label: '📱 جوال باي (تحويل)' },
+                        { value: 'bop',           label: '🏦 بنك فلسطين' },
+                        { value: 'palpay',        label: '💳 بال باي' },
+                        { value: 'wallet',        label: '👛 المحفظة' },
+                    ]},
+                ],
+
                 poll: config.poll,
                 autoPrint: config.autoPrint,
                 width: config.width,
@@ -252,6 +385,72 @@
                     }
                 },
 
+                // ─── filtering ──────────────────────────────────────────
+
+                /**
+                 * Whether an order survives the filters.
+                 *
+                 * `except` lets a chip count itself against everything else,
+                 * so the numbers describe what clicking would actually give.
+                 */
+                matches(order, except) {
+                    if (this.filters.status !== 'all' && except !== 'status') {
+                        const wanted = this.statusGroups[this.filters.status] || [];
+                        if (!wanted.includes(order.status)) return false;
+                    }
+
+                    if (this.filters.channel !== 'all' && except !== 'channel') {
+                        if (order.deliveryMethod !== this.filters.channel) return false;
+                    }
+
+                    if (this.filters.payment !== 'all' && except !== 'payment') {
+                        if (order.paymentMethod !== this.filters.payment) return false;
+                    }
+
+                    return this.matchesSearch(order);
+                },
+
+                matchesSearch(order) {
+                    const term = this.search.trim().toLowerCase();
+
+                    if (!term) return true;
+
+                    // Digits only when the term is a number, so 0599 finds a
+                    // phone stored as 059-9... just the same.
+                    const digits = term.replace(/\D/g, '');
+                    const phone  = (order.customerPhone || '').replace(/\D/g, '');
+
+                    return (order.reference || '').toLowerCase().includes(term)
+                        || (order.customerName || '').toLowerCase().includes(term)
+                        || (digits.length > 0 && phone.includes(digits));
+                },
+
+                visible() {
+                    return this.orders.filter(o => this.matches(o, null));
+                },
+
+                count(key, value) {
+                    return this.orders.filter(o => {
+                        if (!this.matches(o, key)) return false;
+                        if (value === 'all') return true;
+
+                        if (key === 'status')  return (this.statusGroups[value] || []).includes(o.status);
+                        if (key === 'channel') return o.deliveryMethod === value;
+
+                        return o.paymentMethod === value;
+                    }).length;
+                },
+
+                isFiltered() {
+                    return this.search.trim() !== ''
+                        || Object.values(this.filters).some(v => v !== 'all');
+                },
+
+                clearFilters() {
+                    this.filters = { status: 'all', channel: 'all', payment: 'all' };
+                    this.search  = '';
+                },
+
                 printNew() {
                     this.orders
                         // Only what the network printer did not already handle.
@@ -288,6 +487,34 @@
                     this.refresh();
                 },
 
+                async assignDriver(order) {
+                    const drivers = await this.$wire.drivers();
+
+                    if (!drivers.length) {
+                        window.alert('لا يوجد سائقون مفعّلون — أضفهم من «السائقون» في القائمة الجانبية.');
+
+                        return;
+                    }
+
+                    // Company, phone and whether they are already out: enough
+                    // to choose without opening another screen.
+                    const lines = drivers.map((d, i) => {
+                        const parts = [d.name, d.company, d.phone, d.status].filter(Boolean);
+
+                        return (i + 1) + ') ' + parts.join(' — ');
+                    });
+
+                    const choice = window.prompt('السائق:
+' + lines.join('
+'), '1');
+                    const index  = parseInt(choice, 10) - 1;
+
+                    if (isNaN(index) || !drivers[index]) return;
+
+                    await this.$wire.assignDriver(order.reference, drivers[index].id);
+                    this.refresh();
+                },
+
                 kindLabel(order) {
                     return {
                         'dine-in':  'داخل المحل' + (order.tableNumber ? ' · طاولة ' + order.tableNumber : ''),
@@ -300,7 +527,7 @@
                     return {
                         'cash': 'نقداً', 'visa': 'بطاقة', 'wallet': 'محفظة',
                         'jawwal': 'جوال باي', 'jawwal-manual': 'جوال باي (تحويل)',
-                        'bop': 'بنك فلسطين', 'paypal': 'PayPal',
+                        'bop': 'بنك فلسطين', 'palpay': 'بال باي',
                     }[method] || method;
                 },
 

@@ -30,9 +30,57 @@ class RepairRefunds extends Command
 {
     protected $signature = 'orders:repair-refunds
         {--fix : Write the corrections instead of only listing them}
-        {--credit : For rows where no money moved, refund to the wallet now}';
+        {--credit : For rows where no money moved, refund to the wallet now}
+        {--clear= : For rows that were only mislabelled, put them back in this status}';
 
     protected $description = 'Repair orders marked refunded that carry no refund amount';
+
+    /**
+     * Undo a refund label on orders where no money ever moved.
+     *
+     * Separate from --credit and mutually exclusive with it, because the two
+     * answer opposite questions about the same row: --credit says the customer
+     * is owed, this says nothing was ever owed. Getting them the wrong way
+     * round either pays a debt twice or writes one off.
+     *
+     * Only ever touches rows with no refund recorded — the query that built
+     * this list guarantees that — so it cannot erase a real refund.
+     *
+     * @param  \Illuminate\Support\Collection<int, Order>  $broken
+     */
+    private function clearLabel($broken, string $status): int
+    {
+        $settled = $broken->filter(fn (Order $order) => $order->refunded_at === null);
+
+        foreach ($settled as $order) {
+            $allowed = $order->fulfilmentFlow();
+
+            // The ladders differ per delivery method: "في الطريق" is a delivery
+            // state and means nothing on a dine-in order.
+            if (! in_array($status, $allowed, true)) {
+                $this->error("  {$order->reference} ({$order->delivery_method}): «{$status}» is not one of its statuses.");
+                $this->line('  Allowed here: ' . implode(' · ', $allowed));
+
+                return self::FAILURE;
+            }
+        }
+
+        foreach ($settled as $order) {
+            $order->update([
+                'status'          => $status,
+                'refunded_amount' => 0,
+                'refunded_at'     => null,
+                'refund_method'   => null,
+            ]);
+
+            $this->line("  {$order->reference}: → «{$status}»");
+        }
+
+        $this->newLine();
+        $this->components->info($settled->count() . ' order(s) put back; no money was moved.');
+
+        return self::SUCCESS;
+    }
 
     public function handle(WalletService $wallet): int
     {
@@ -72,9 +120,15 @@ class RepairRefunds extends Command
         if (! $this->option('fix')) {
             $this->newLine();
             $this->comment('  Re-run with --fix to record the refunds that already happened.');
-            $this->comment('  Add --credit to also refund the rows where no money ever moved.');
+            $this->comment('  For rows where no money moved, pick ONE of these — they are not the same:');
+            $this->comment('    --credit          the customer was never repaid; refund to their wallet now');
+            $this->comment('    --clear="<حالة>"  it was never a refund; put the order back in its real status');
 
             return self::FAILURE;
+        }
+
+        if (($clear = $this->option('clear')) !== null) {
+            return $this->clearLabel($broken, (string) $clear);
         }
 
         $recorded = 0;

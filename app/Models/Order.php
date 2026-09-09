@@ -97,6 +97,7 @@ class Order extends Model
         'table_number', 'printed_at', 'print_count', 'print_error',
         'paid_by', 'shift_id', 'refunded_amount', 'refunded_at', 'refund_method',
         'tendered_amount', 'change_credited', 'change_credited_at',
+        'driver_id', 'payment_account_id',
     ];
 
     protected $casts = [
@@ -281,6 +282,29 @@ class Order extends Model
     public static function newPublicToken(): string
     {
         return Str::random(64);
+    }
+
+    public function driverRecord(): BelongsTo
+    {
+        return $this->belongsTo(Driver::class, 'driver_id');
+    }
+
+    public function paymentAccount(): BelongsTo
+    {
+        return $this->belongsTo(PaymentAccount::class);
+    }
+
+    /**
+     * Whether this order may be put on the road.
+     *
+     * A delivery with no driver named is a delivery nobody can be asked about:
+     * the customer phones to ask where it is and the shop has no answer. So
+     * the driver is not paperwork to be filled in afterwards — it is the thing
+     * that makes "في الطريق" mean something.
+     */
+    public function canGoOnTheRoad(): bool
+    {
+        return $this->delivery_method === 'delivery' && $this->driver_id !== null;
     }
 
     /**

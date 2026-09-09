@@ -7,6 +7,7 @@ use App\Models\Address;
 use App\Models\Coupon;
 use App\Models\Customer;
 use App\Models\Order;
+use App\Models\PaymentAccount;
 use App\Models\OtpCode;
 use App\Services\Auth\OtpService;
 use App\Services\Checkout\CartItemNormalizer;
@@ -96,9 +97,12 @@ class StorefrontOrderService
         //      total this service priced rather than the one the client showed.
         $tendered = $this->resolveTendered($payload, $customer, $paymentMethod, $total);
 
+        // 9 ── which of the shop's accounts the transfer went to.
+        $account = $this->resolvePaymentAccount($payload, $paymentMethod);
+
         return DB::transaction(function () use (
             $payload, $customer, $cart, $address, $coupon, $discount,
-            $deliveryFee, $subtotal, $total, $paymentMethod, $deliveryMethod, $receiptPath, $tendered
+            $deliveryFee, $subtotal, $total, $paymentMethod, $deliveryMethod, $receiptPath, $tendered, $account
         ) {
             $order = Order::create([
                 'customer_id'     => $customer?->getKey(),
@@ -114,6 +118,7 @@ class StorefrontOrderService
                 'payment_status'  => Order::STATUS_PENDING,
 
                 'payment_method'  => $paymentMethod,
+                'payment_account_id' => $account?->getKey(),
                 'delivery_method' => $deliveryMethod,
 
                 // Dine-in only. The storefront contract has no table field yet,
@@ -406,6 +411,36 @@ class StorefrontOrderService
         }
 
         return $tendered;
+    }
+
+    /**
+     * The shop account this transfer was made to.
+     *
+     * Checked against the payment method rather than trusted: a Jawwal Pay
+     * receipt filed against the bank account sends whoever verifies it to the
+     * wrong statement, and finds nothing there.
+     *
+     * @param  array<string, mixed>  $payload
+     *
+     * @throws ValidationException
+     */
+    private function resolvePaymentAccount(array $payload, string $paymentMethod): ?PaymentAccount
+    {
+        $id = $payload['paymentAccountId'] ?? null;
+
+        if (blank($id)) {
+            return null;
+        }
+
+        $account = PaymentAccount::find($id);
+
+        if (! $account || $account->method !== $paymentMethod) {
+            throw ValidationException::withMessages([
+                'paymentAccountId' => 'حساب الدفع غير صحيح لطريقة الدفع المختارة',
+            ]);
+        }
+
+        return $account;
     }
 
     private function assertMethodsAgree(string $paymentMethod, string $deliveryMethod): void
