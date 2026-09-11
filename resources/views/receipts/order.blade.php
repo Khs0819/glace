@@ -28,7 +28,7 @@
 
     body {
         width: {{ $width }}mm;
-        padding: 3mm;
+        padding: 2mm 2mm 0;
         /* A monospace stack keeps the two-column rows aligned; the Arabic
            faces are named first so they win for Arabic glyphs. */
         font-family: "Tahoma", "Arial", "Segoe UI", monospace;
@@ -41,14 +41,17 @@
     .center { text-align: center; }
     .bold   { font-weight: 700; }
 
-    .shop   { font-size: {{ $width >= 80 ? '19px' : '16px' }}; font-weight: 700; }
-    .kind   { font-size: {{ $width >= 80 ? '17px' : '15px' }}; font-weight: 700; }
-    .dest   { font-size: {{ $width >= 80 ? '15px' : '13px' }}; font-weight: 700; }
+    /* Trimmed deliberately: every millimetre here is a millimetre of roll,
+       and the slip is read at arm's length on a counter, not across a room. */
+    .shop   { font-size: {{ $width >= 80 ? '15px' : '13px' }}; font-weight: 700; }
+    .kind   { font-size: {{ $width >= 80 ? '14px' : '12px' }}; font-weight: 700; }
+    .dest   { font-size: {{ $width >= 80 ? '13px' : '12px' }}; font-weight: 700; }
+    .item-unit { font-size: 0.85em; opacity: .75; }
 
     hr {
         border: 0;
         border-top: 1px dashed #000;
-        margin: 2mm 0;
+        margin: 1.2mm 0;
     }
 
     .row {
@@ -60,11 +63,11 @@
     /* The amount must never wrap or shrink — it is the number being checked. */
     .row .amount { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-    .item      { margin-top: 1.5mm; font-weight: 700; }
+    .item      { margin-top: 1mm; font-weight: 700; }
     .item-note { padding-inline-start: 4mm; font-weight: 400; font-size: 0.9em; }
 
     .total {
-        font-size: {{ $width >= 80 ? '17px' : '15px' }};
+        font-size: {{ $width >= 80 ? '15px' : '13px' }};
         font-weight: 700;
         border-top: 2px solid #000;
         padding-top: 1.5mm;
@@ -79,7 +82,7 @@
         border: 2px solid #000;
     }
 
-    .footer { margin-top: 3mm; }
+    .footer { margin-top: 2mm; }
 
     /* Controls are for the screen only; they must never reach the paper. */
     .controls { margin: 4mm 0; text-align: center; }
@@ -118,6 +121,13 @@
         <span>{{ $item['qty'] }} × {{ $item['name'] }}</span>
         <span class="amount">{{ number_format($item['total'], 2) }}</span>
     </div>
+    @if ($item['qty'] > 1)
+        {{-- A line of three cannot be checked against the menu without it. --}}
+        <div class="row item-unit">
+            <span></span>
+            <span class="amount">{{ $item['qty'] }} × {{ number_format($item['unit'], 2) }}</span>
+        </div>
+    @endif
     @foreach ($item['notes'] as $note)
         <div class="item-note">{{ $note }}</div>
     @endforeach
@@ -138,10 +148,11 @@
     <span>الدفع</span><span class="bold">{{ $doc->paymentLabel() }}</span>
 </div>
 
-@unless ($doc->paid())
-    {{-- Loud on purpose: nobody should hand over an unpaid order by mistake. --}}
-    <div class="unpaid">*** غير مدفوع ***</div>
-@endunless
+@if ($driver = $doc->driverLine())
+    {{-- The box the "غير مدفوع" banner used to have. On a delivery slip the
+         thing worth seeing at a glance is who is carrying it. --}}
+    <div class="unpaid">السائق: {{ $driver }}</div>
+@endif
 
 @if ($lines = $doc->addressLines())
     <hr>

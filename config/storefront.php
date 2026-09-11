@@ -95,6 +95,13 @@ return [
         'port'        => (int) env('GLACE_PRINTER_PORT', 9100),
         'timeout'     => (int) env('GLACE_PRINTER_TIMEOUT', 5),
         'codepage'    => env('GLACE_PRINTER_CODEPAGE', 'CP864'),
+
+        // The `ESC t n` index for that code page. Left blank we guess from the
+        // name using Epson's numbering, which is right on an Epson and wrong
+        // on most other makes — a Bixolon SRP-330 puts the same code page
+        // somewhere else entirely. Run `php artisan printer:codepages` and read
+        // the number off the paper.
+        'codepage_table' => env('GLACE_PRINTER_CODEPAGE_TABLE'),
         'width'       => (int) env('GLACE_PRINTER_WIDTH', 48),
         'cut'         => (bool) env('GLACE_PRINTER_CUT', true),
         'open_drawer' => (bool) env('GLACE_PRINTER_DRAWER', false),

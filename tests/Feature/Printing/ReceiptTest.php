@@ -77,17 +77,22 @@ it('wraps printer lines to the paper width', function () {
     }
 });
 
-it('marks an unpaid order loudly on the paper', function () {
+it('no longer prints an unpaid banner', function () {
+    // Removed at the shop's request: the slip is not printed in that state,
+    // and the box is better spent on the driver.
     $lines = collect((new ReceiptDocument(receiptOrder(), []))->lines())->pluck('text');
 
-    expect($lines->contains(fn ($l) => str_contains($l, 'غير مدفوع')))->toBeTrue();
+    expect($lines->contains(fn ($l) => str_contains($l, 'غير مدفوع')))->toBeFalse();
 });
 
-it('does not shout unpaid once the money is in', function () {
-    $order = receiptOrder(['payment_status' => Order::STATUS_PAID]);
+it('puts the driver in the box on a delivery slip', function () {
+    $order = receiptOrder([
+        'delivery_method' => 'delivery',
+        'driver'          => ['name' => 'أحمد سعيد', 'phone' => '0599876543'],
+    ]);
     $lines = collect((new ReceiptDocument($order, []))->lines())->pluck('text');
 
-    expect($lines->contains(fn ($l) => str_contains($l, 'غير مدفوع')))->toBeFalse();
+    expect($lines->contains(fn ($l) => str_contains($l, 'السائق: أحمد سعيد')))->toBeTrue();
 });
 
 // ─── ESC/POS ────────────────────────────────────────────────────────────────

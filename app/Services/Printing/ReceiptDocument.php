@@ -95,12 +95,18 @@ class ReceiptDocument
         ], static fn ($value) => $value !== null && $value !== '');
     }
 
-    /** @return array<int, array{name: string, qty: int, total: float, notes: array<int, string>}> */
+    /**
+     * @return array<int, array{name: string, qty: int, unit: float, total: float, notes: array<int, string>}>
+     */
     public function items(): array
     {
         return $this->order->items->map(fn (OrderItem $item) => [
             'name'  => $item->product_name,
             'qty'   => $item->quantity,
+            // Per-unit as well as line total: a customer checking a slip adds
+            // up the unit prices, and without them the only way to verify a
+            // line of three is to divide.
+            'unit'  => (float) $item->unit_price + (float) $item->addons_total / max(1, (int) $item->quantity),
             'total' => $item->line_total,
             // The resolved description carries size, flavours and extras, which
             // is exactly what whoever makes the order needs to read.
@@ -138,10 +144,30 @@ class ReceiptDocument
         ][$this->order->payment_method] ?? $this->order->payment_method;
     }
 
-    /** Unpaid orders say so on the paper, so nobody hands one over by mistake. */
     public function paid(): bool
     {
         return $this->order->isPaid();
+    }
+
+    /**
+     * The driver, for the box that used to hold "غير مدفوع".
+     *
+     * That banner is gone: it warned about a state the slip is not printed in
+     * any more, and the one thing worth a box on a delivery slip is who is
+     * carrying it.
+     */
+    public function driverLine(): ?string
+    {
+        if ($this->order->delivery_method !== 'delivery' || blank($this->order->driver)) {
+            return null;
+        }
+
+        $driver = $this->order->driver;
+
+        return trim(implode(' · ', array_filter([
+            $driver['name'] ?? null,
+            $driver['phone'] ?? null,
+        ])));
     }
 
     /**
@@ -201,7 +227,15 @@ class ReceiptDocument
 
         $rule = fn () => $push(str_repeat('-', $width), ['align' => 'center']);
 
-        $push($this->shopName(), ['align' => 'center', 'bold' => true, 'large' => true]);
+        /*
+         * Bold, not double-height.
+         *
+         * A thermal slip is charged by the millimetre of paper and read at
+         * arm's length on a counter; every double-height line costs a line of
+         * roll for legibility nobody needed. The name and the kind still stand
+         * out — weight does that as well as size, in half the space.
+         */
+        $push($this->shopName(), ['align' => 'center', 'bold' => true]);
 
         foreach ($this->shopLines() as $line) {
             $push($line, ['align' => 'center']);
@@ -209,7 +243,7 @@ class ReceiptDocument
 
         $rule();
 
-        $push($this->kind(), ['align' => 'center', 'bold' => true, 'large' => true]);
+        $push($this->kind(), ['align' => 'center', 'bold' => true]);
 
         if ($destination = $this->destination()) {
             $push($destination, ['align' => 'center', 'bold' => true]);
@@ -233,6 +267,17 @@ class ReceiptDocument
                 ['bold' => true],
             );
 
+            // The arithmetic, on its own line and unbolded: a line of three
+            // cannot be checked against the menu without the unit price, and
+            // putting it beside the name crowds the name off narrow paper.
+            if ($item['qty'] > 1) {
+                $push($this->columns(
+                    '',
+                    $item['qty'] . ' × ' . number_format($item['unit'], 2),
+                    $width,
+                ));
+            }
+
             foreach ($item['notes'] as $note) {
                 // Indented so the extras read as belonging to the line above.
                 $push('   ' . $note);
@@ -246,8 +291,8 @@ class ReceiptDocument
         }
 
         $push(
-            $this->columns('الإجمالي', number_format($this->total(), 2) . ' ILS', $width),
-            ['bold' => true, 'large' => true],
+            $this->columns('الإجمالي', number_format($this->total(), 2) . ' ₪', $width),
+            ['bold' => true],
         );
 
         $push($this->columns('الدفع', $this->paymentLabel(), $width));
@@ -261,8 +306,12 @@ class ReceiptDocument
             $push('*** لا تُعِد باقياً نقداً ***', ['align' => 'center', 'bold' => true]);
         }
 
-        if (! $this->paid()) {
-            $push('*** غير مدفوع ***', ['align' => 'center', 'bold' => true]);
+        // The driver takes the box the "غير مدفوع" banner used to have. On a
+        // delivery slip the useful thing to see at a glance is who is carrying
+        // it, not a payment state the slip is no longer printed in.
+        if ($driver = $this->driverLine()) {
+            $rule();
+            $push('السائق: ' . $driver, ['align' => 'center', 'bold' => true]);
         }
 
         if ($lines = $this->addressLines()) {

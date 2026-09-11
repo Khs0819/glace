@@ -129,6 +129,23 @@ class EscPosPrinter
     /**
      * @throws RuntimeException
      */
+    /**
+     * Push bytes at the printer as-is.
+     *
+     * For the calibration and test slips, which build their own stream because
+     * the whole point of them is to try sequences the normal path would not.
+     *
+     * @throws RuntimeException when the printer cannot be reached
+     */
+    public function sendRaw(string $payload): void
+    {
+        if (! $this->enabled()) {
+            throw new RuntimeException('طابعة الشبكة غير مفعّلة');
+        }
+
+        $this->send($payload);
+    }
+
     private function send(string $payload): void
     {
         $errno  = 0;
@@ -168,15 +185,38 @@ class EscPosPrinter
     }
 
     /** ESC t n — selects the character table the following bytes are read in. */
+    /**
+     * `ESC t n` — which character table the printer decodes our bytes with.
+     *
+     * `n` is NOT standard across manufacturers. The numbers below are Epson's,
+     * and they are only a default: on a Bixolon SRP-330 the same code page sits
+     * at a different index, so sending 37 there selects some unrelated table and
+     * Arabic arrives as Latin punctuation. That failure looks exactly like a
+     * shaping bug and is not one.
+     *
+     * So the index is configurable, and `printer:codepages` prints a slip that
+     * tries the candidates in turn — the answer is read off the paper in a
+     * minute instead of guessed at from a datasheet.
+     */
     private function selectCodePage(): string
     {
-        $table = match (strtoupper((string) ($this->config['codepage'] ?? 'CP864'))) {
-            'CP864'  => 37,   // Arabic, presentation forms
-            'CP1256' => 50,   // Arabic, base letters (printer shapes)
-            default  => 0,
-        };
+        $table = $this->config['codepage_table'] ?? null;
 
-        return self::ESC . 't' . chr($table);
+        if ($table === null || $table === '') {
+            $table = match (strtoupper((string) ($this->config['codepage'] ?? 'CP864'))) {
+                'CP864'  => 37,   // Arabic, presentation forms   (Epson index)
+                'CP1256' => 50,   // Arabic, base letters          (Epson index)
+                default  => 0,
+            };
+        }
+
+        return $this->codePageCommand((int) $table);
+    }
+
+    /** The raw table-select command, so a calibration slip can switch mid-print. */
+    public function codePageCommand(int $table): string
+    {
+        return self::ESC . 't' . chr(max(0, min(255, $table)));
     }
 
     private function host(): string
