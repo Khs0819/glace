@@ -26,9 +26,20 @@
         color: #000;
     }
 
+    /*
+     * The printable width, not the paper width.
+     *
+     * A thermal head does not reach the edges of its roll: 80 mm paper prints
+     * 72 mm, 58 mm paper prints 48 mm. Drawing the page at the full paper width
+     * puts the outer millimetres outside the head, and in a right-to-left
+     * layout that is exactly where the order number, date and phone sit — so
+     * they came out cut off. Centred, so the driver's own offset does not
+     * matter.
+     */
     body {
-        width: {{ $width }}mm;
-        padding: 2mm 2mm 0;
+        width: {{ $width >= 80 ? 72 : 48 }}mm;
+        margin: 0 auto;
+        padding: 1mm 1mm 0;
         /* A monospace stack keeps the two-column rows aligned; the Arabic
            faces are named first so they win for Arabic glyphs. */
         font-family: "Tahoma", "Arial", "Segoe UI", monospace;
@@ -74,7 +85,7 @@
         margin-top: 1.5mm;
     }
 
-    .unpaid {
+    .driver-box {
         margin-top: 2mm;
         padding: 1.5mm;
         text-align: center;
@@ -151,7 +162,7 @@
 @if ($driver = $doc->driverLine())
     {{-- The box the "غير مدفوع" banner used to have. On a delivery slip the
          thing worth seeing at a glance is who is carrying it. --}}
-    <div class="unpaid">السائق: {{ $driver }}</div>
+    <div class="driver-box">السائق: {{ $driver }}</div>
 @endif
 
 @if ($lines = $doc->addressLines())

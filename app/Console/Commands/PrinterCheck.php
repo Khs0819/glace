@@ -47,10 +47,14 @@ class PrinterCheck extends Command
         $ok = $this->reportQueue();
 
         if (! $printer->enabled()) {
+            // Not an error: printing through the cashier screen is a complete
+            // setup on its own, and the one most shops run. Reporting it as a
+            // failure sent people chasing a problem they did not have.
             $this->newLine();
-            $this->components->error('Network printing is off — only the cashier screen will print.');
+            $this->components->info('Printing through the cashier screen (browser). Network printing is not in use.');
+            $this->line('  Keep the cashier screen open with «طباعة تلقائية» ticked, and new orders print on arrival.');
 
-            return self::FAILURE;
+            return $ok ? self::SUCCESS : self::FAILURE;
         }
 
         $this->newLine();

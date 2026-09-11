@@ -101,3 +101,16 @@ it('serves the receipt at both paper widths', function () {
             ->assertSee("size: {$width}mm auto", false);
     }
 });
+
+it('draws within the printable width, not the paper width', function () {
+    // 80 mm paper prints 72 mm and 58 mm prints 48 mm. Drawing at the paper
+    // width pushed the order number, date and phone off the head.
+    $this->actingAs(User::factory()->create());
+    $order = routeOrder();
+
+    $this->get(route('receipts.show', $order->reference) . '?width=80')
+        ->assertSee('width: 72mm', false);
+
+    $this->get(route('receipts.show', $order->reference) . '?width=58')
+        ->assertSee('width: 48mm', false);
+});
