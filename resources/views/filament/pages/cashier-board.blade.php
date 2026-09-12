@@ -810,6 +810,53 @@
                         <div class="text-xs text-rose-600 bg-rose-50 dark:bg-rose-900/20 rounded-lg px-2 py-1 mb-2" x-text="'⚠ ' + order.printError"></div>
                     </template>
 
+                    {{-- Cash tendered + change calculator --}}
+                    <template x-if="!order.paid && order.paymentMethod === 'cash'">
+                        <div class="mb-3 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="text-sm font-bold text-amber-700 dark:text-amber-400">💵 استلام نقدي</span>
+                            </div>
+                            <div class="flex items-center gap-2 mb-1.5">
+                                <label class="text-xs text-gray-500 w-20 shrink-0">المبلغ المستلم</label>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    :placeholder="Number(order.total).toFixed(2)"
+                                    class="flex-1 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 text-sm px-2 py-1.5 font-bold"
+                                    x-model.number="tendered[order.reference]"
+                                    @input="calcChange(order)"
+                                >
+                                <span class="text-xs text-gray-500">₪</span>
+                            </div>
+                            <template x-if="getChange(order) > 0">
+                                <div class="flex items-center justify-between mt-1.5 p-2 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800">
+                                    <span class="text-sm font-bold text-green-700 dark:text-green-400">الباقي:</span>
+                                    <span class="text-lg font-black text-green-700 dark:text-green-400" x-text="getChange(order).toFixed(2) + ' ₪'"></span>
+                                </div>
+                            </template>
+                            <div class="flex items-center gap-1.5 mt-2">
+                                <button class="btn-pay flex-1" @click="payExact(order)">
+                                    💵 استلام بدون باقي
+                                </button>
+                                <template x-if="getChange(order) > 0">
+                                    <button class="btn-refund flex-1" style="background:#d97706" @click="openRefundModal(order)">
+                                        ↩️ استلام + طلب استرداد
+                                    </button>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+
+                    {{-- Visa unpaid --}}
+                    <template x-if="!order.paid && order.paymentMethod === 'visa'">
+                        <div class="mb-3">
+                            <button class="btn-pay w-full" @click="$wire.markPaid(order.reference).then(() => refresh())">
+                                💳 استلام دفع بطاقة
+                            </button>
+                        </div>
+                    </template>
+
                     {{-- Time + actions --}}
                     <div class="flex items-center justify-between flex-wrap gap-2">
                         <div class="flex items-center gap-1 text-xs text-gray-400">
@@ -818,22 +865,20 @@
                         </div>
 
                         <div class="flex items-center gap-1.5 flex-wrap">
-                            {{-- Print --}}
-                            <button class="btn-print" @click="print(order, false)">
-                                🖨️ <span x-text="order.printed ? 'إعادة' : 'طباعة'"></span>
+                            {{-- Direct print --}}
+                            <button class="btn-print" @click="printDirect(order)" :disabled="printing[order.reference]">
+                                <template x-if="printing[order.reference]">
+                                    <span>⏳ جاري...</span>
+                                </template>
+                                <template x-if="!printing[order.reference]">
+                                    <span>🖨️ <span x-text="order.printed ? 'إعادة' : 'طباعة'"></span></span>
+                                </template>
                             </button>
 
                             {{-- Update status --}}
                             <template x-if="!order.final">
                                 <button class="btn-update-status" @click="openStatusModal(order)">
                                     تحديث الحالة
-                                </button>
-                            </template>
-
-                            {{-- Collect payment (cash/visa only) --}}
-                            <template x-if="!order.paid && ['cash','visa'].includes(order.paymentMethod)">
-                                <button class="btn-pay" @click="$wire.markPaid(order.reference).then(() => refresh())">
-                                    💵 استلام الدفع
                                 </button>
                             </template>
 
@@ -971,6 +1016,139 @@
                 </div>
             </div>
         </template>
+
+        {{-- ─── change refund request modal ───────────────────────────────── --}}
+        <template x-if="modal.type === 'refund'">
+            <div class="modal-overlay" @click.self="closeModal()">
+                <div class="modal-content">
+                    <div class="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <div class="text-lg font-bold">↩️ طلب استرداد الباقي</div>
+                                <div class="text-sm text-gray-500" x-text="'الطلب: ' + modal.reference"></div>
+                            </div>
+                            <button @click="closeModal()" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+                        </div>
+                    </div>
+
+                    <div class="p-5 space-y-3">
+                        <div class="p-3 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 text-center">
+                            <div class="text-sm text-green-600">💰 مبلغ الباقي</div>
+                            <div class="text-2xl font-black text-green-700" x-text="Number(modal.refundAmount).toFixed(2) + ' ₪'"></div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-bold mb-1">👤 اسم صاحب الحساب</label>
+                            <input type="text" x-model="modal.holderName"
+                                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 text-sm px-3 py-2">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-bold mb-1">📞 رقم جوال صاحب الحساب</label>
+                            <input type="text" x-model="modal.holderPhone"
+                                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 text-sm px-3 py-2">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-bold mb-1">💳 وسيلة الاسترداد</label>
+                            <div class="grid grid-cols-2 gap-2 mt-1">
+                                <template x-for="method in refundMethods" :key="method.value">
+                                    <div
+                                        class="status-option text-sm"
+                                        :class="modal.refundMethod === method.value ? 'selected' : ''"
+                                        @click="modal.refundMethod = method.value"
+                                    >
+                                        <span class="w-4 h-4 rounded-full border-2 flex items-center justify-center"
+                                              :class="modal.refundMethod === method.value ? 'border-blue-600' : 'border-gray-300'">
+                                            <span x-show="modal.refundMethod === method.value" class="w-2 h-2 rounded-full bg-blue-600"></span>
+                                        </span>
+                                        <span x-text="method.icon + ' ' + method.label"></span>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-bold mb-1">📝 ملاحظات (اختياري)</label>
+                            <textarea x-model="modal.refundNotes" rows="2"
+                                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 text-sm px-3 py-2"
+                                placeholder="أي ملاحظات إضافية..."></textarea>
+                        </div>
+                    </div>
+
+                    <div class="px-5 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-end gap-2">
+                        <button @click="closeModal()"
+                            class="px-4 py-2 rounded-lg text-sm font-bold border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800"
+                        >إلغاء</button>
+                        <button @click="confirmRefund()"
+                            :disabled="!modal.refundMethod"
+                            class="px-4 py-2 rounded-lg text-sm font-bold text-white transition"
+                            :class="modal.refundMethod ? 'bg-amber-600 hover:bg-amber-700' : 'bg-gray-300 cursor-not-allowed'"
+                        >✅ استلام + إنشاء طلب الاسترداد</button>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        {{-- ─── driver settlements section ────────────────────────────────── --}}
+        <div class="mt-6" x-show="driverData.length > 0">
+            <div class="filter-section">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-2">
+                        <span class="text-lg">🚗</span>
+                        <span class="text-base font-bold">موازنة السائقين</span>
+                    </div>
+                    <button @click="loadDriverSettlements()" class="text-xs text-blue-600 hover:underline">🔄 تحديث</button>
+                </div>
+
+                <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <template x-for="(d, idx) in driverData" :key="idx">
+                        <div class="rounded-xl border-2 border-sky-200 dark:border-sky-800 bg-sky-50/50 dark:bg-sky-950/20 p-3">
+                            <div class="flex items-center justify-between mb-2">
+                                <div>
+                                    <div class="font-bold text-sm" x-text="d.driver_name"></div>
+                                    <template x-if="d.driver_company">
+                                        <div class="text-xs text-gray-500" x-text="d.driver_company"></div>
+                                    </template>
+                                </div>
+                                <template x-if="d.driver_phone">
+                                    <a class="text-xs text-blue-600" :href="'tel:' + d.driver_phone" x-text="'📞 ' + d.driver_phone"></a>
+                                </template>
+                            </div>
+
+                            <div class="grid grid-cols-3 gap-2 mb-2">
+                                <div class="text-center p-1.5 rounded-lg bg-white dark:bg-gray-800">
+                                    <div class="text-xs text-gray-500">الطلبات</div>
+                                    <div class="text-sm font-black" x-text="d.total_orders"></div>
+                                </div>
+                                <div class="text-center p-1.5 rounded-lg bg-white dark:bg-gray-800">
+                                    <div class="text-xs text-gray-500">الإجمالي</div>
+                                    <div class="text-sm font-black" x-text="Number(d.total_amount).toFixed(2) + ' ₪'"></div>
+                                </div>
+                                <div class="text-center p-1.5 rounded-lg bg-white dark:bg-gray-800">
+                                    <div class="text-xs text-gray-500">كاش مجموع</div>
+                                    <div class="text-sm font-black text-green-600" x-text="Number(d.cash_collected).toFixed(2) + ' ₪'"></div>
+                                </div>
+                            </div>
+
+                            <details class="text-xs">
+                                <summary class="cursor-pointer text-blue-600 hover:underline">📋 تفاصيل الطلبات</summary>
+                                <div class="mt-1 space-y-1">
+                                    <template x-for="o in d.orders" :key="o.reference">
+                                        <div class="flex items-center justify-between p-1.5 rounded bg-white dark:bg-gray-800">
+                                            <span class="font-bold" x-text="o.reference"></span>
+                                            <span x-text="Number(o.total).toFixed(2) + ' ₪'"></span>
+                                            <span x-text="o.delivered_at"></span>
+                                            <span x-show="o.cash_collected" class="text-green-600 font-bold">💵</span>
+                                        </div>
+                                    </template>
+                                </div>
+                            </details>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
     </div>
 
     @push('scripts')
@@ -982,8 +1160,24 @@
                 sortOrder: 'newest',
                 filters: { status: 'all', channel: 'all', payment: 'all' },
 
+                // Cash tendered tracking per order
+                tendered: {},
+                changeCalc: {},
+                printing: {},
+
+                // Driver settlements data
+                driverData: [],
+
+                // Refund methods for the modal
+                refundMethods: [
+                    { value: 'jawwal', label: 'جوال بي', icon: '📱' },
+                    { value: 'bop',    label: 'بنك فلسطين', icon: '🏦' },
+                    { value: 'palpay', label: 'بال بي', icon: '💳' },
+                    { value: 'cash',   label: 'نقداً', icon: '💵' },
+                ],
+
                 // Modal state
-                modal: { type: null, reference: null, options: [], drivers: [], selectedDriverId: null, selectedStatus: null, currentStatus: null },
+                modal: { type: null, reference: null, options: [], drivers: [], selectedDriverId: null, selectedStatus: null, currentStatus: null, refundAmount: 0, holderName: '', holderPhone: '', refundMethod: null, refundNotes: '' },
 
                 // Status groups for filtering — the counter thinks in broad
                 // buckets, not in the full vocabulary.
@@ -1030,9 +1224,12 @@
 
                 start() {
                     this.refresh();
+                    this.loadDriverSettlements();
                     this.timer = setInterval(() => this.refresh(), this.poll * 1000);
+                    // Refresh driver data every 2 minutes
+                    setInterval(() => this.loadDriverSettlements(), 120000);
                     document.addEventListener('visibilitychange', () => {
-                        if (!document.hidden) this.refresh();
+                        if (!document.hidden) { this.refresh(); this.loadDriverSettlements(); }
                     });
                 },
 
@@ -1143,6 +1340,25 @@
                     window.open(url, 'receipt-' + order.reference, 'width=420,height=700');
                 },
 
+                // Direct print — no preview window
+                async printDirect(order) {
+                    this.printing[order.reference] = true;
+                    try {
+                        const result = await this.$wire.printDirect(order.reference);
+                        if (result.success) {
+                            this.printed.add(order.reference);
+                            this.refresh();
+                        } else {
+                            // Fallback to browser print
+                            this.print(order, false);
+                        }
+                    } catch (e) {
+                        this.print(order, false);
+                    } finally {
+                        this.printing[order.reference] = false;
+                    }
+                },
+
                 // ─── modals ─────────────────────────────────────────────────
 
                 async openStatusModal(order) {
@@ -1187,7 +1403,63 @@
                 },
 
                 closeModal() {
-                    this.modal = { type: null, reference: null, options: [], drivers: [], selectedDriverId: null, selectedStatus: null, currentStatus: null };
+                    this.modal = { type: null, reference: null, options: [], drivers: [], selectedDriverId: null, selectedStatus: null, currentStatus: null, refundAmount: 0, holderName: '', holderPhone: '', refundMethod: null, refundNotes: '' };
+                },
+
+                // ─── cash change & refund ────────────────────────────────────
+
+                calcChange(order) {
+                    const t = parseFloat(this.tendered[order.reference]) || 0;
+                    this.changeCalc[order.reference] = Math.max(0, +(t - order.total).toFixed(2));
+                },
+
+                getChange(order) {
+                    return this.changeCalc[order.reference] || 0;
+                },
+
+                // Pay exact (no change)
+                async payExact(order) {
+                    await this.$wire.markPaid(order.reference);
+                    this.refresh();
+                },
+
+                openRefundModal(order) {
+                    const change = this.getChange(order);
+                    this.modal = {
+                        type: 'refund',
+                        reference: order.reference,
+                        refundAmount: change,
+                        holderName: order.customerName || '',
+                        holderPhone: order.customerPhone || '',
+                        refundMethod: null,
+                        refundNotes: '',
+                        options: [], drivers: [], selectedDriverId: null, selectedStatus: null, currentStatus: null,
+                    };
+                },
+
+                async confirmRefund() {
+                    if (!this.modal.refundMethod) return;
+                    const tendered = parseFloat(this.tendered[this.modal.reference]) || 0;
+                    await this.$wire.markPaidWithChange(
+                        this.modal.reference,
+                        tendered,
+                        {
+                            holder_name: this.modal.holderName,
+                            holder_phone: this.modal.holderPhone,
+                            refund_method: this.modal.refundMethod,
+                            notes: this.modal.refundNotes,
+                        }
+                    );
+                    this.closeModal();
+                    this.refresh();
+                },
+
+                // ─── driver settlements ──────────────────────────────────────
+
+                async loadDriverSettlements() {
+                    try {
+                        this.driverData = await this.$wire.driverSettlements();
+                    } catch (e) { /* silent */ }
                 },
 
                 // ─── labels & styling helpers ───────────────────────────────

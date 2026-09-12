@@ -3,7 +3,9 @@
 namespace App\Filament\Pages;
 
 use App\Models\CashierShift;
+use App\Models\ChangeRefundRequest;
 use App\Models\Driver;
+use App\Models\DriverSettlement;
 use App\Models\Order;
 use App\Services\Checkout\Money;
 use App\Services\Printing\ReceiptPrinter;
@@ -270,6 +272,81 @@ class CashierBoard extends Page
         Notification::make()->title('تم استلام الدفع')->success()->send();
     }
 
+    /**
+     * Accept cash payment with a specific tendered amount and create a change
+     * refund request if the customer overpaid.
+     *
+     * This marks the order as paid immediately (the cashier has the money in
+     * hand) and records a separate refund request for the change — reviewed
+     * at shift close rather than transferred on the spot.
+     */
+    public function markPaidWithChange(string $reference, float $tendered, array $refundData): void
+    {
+        $order = Order::with('customer')->where('reference', $reference)->firstOrFail();
+
+        if ($order->isPaid()) {
+            return;
+        }
+
+        if (! $order->collectedByHand()) {
+            Notification::make()
+                ->title('هذا الطلب لا يُدفع عند الكاشير')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        $shift = $this->shift();
+
+        if (! $shift) {
+            Notification::make()
+                ->title('افتح وردية أولاً')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $change = max(0.0, round($tendered - $order->total, 2));
+
+        DB::transaction(function () use ($order, $shift, $tendered, $change, $refundData) {
+            $order->update([
+                'payment_status'  => Order::STATUS_PAID,
+                'paid_at'         => now(),
+                'paid_by'         => auth()->id(),
+                'shift_id'        => $shift->getKey(),
+                'tendered_amount' => $tendered,
+            ]);
+
+            if ($change > 0 && ! empty($refundData['refund_method'])) {
+                ChangeRefundRequest::create([
+                    'order_id'        => $order->getKey(),
+                    'order_reference' => $order->reference,
+                    'amount'          => $change,
+                    'holder_name'     => $refundData['holder_name'] ?? $order->customer_name ?? '',
+                    'holder_phone'    => $refundData['holder_phone'] ?? $order->customer_phone ?? '',
+                    'refund_method'   => $refundData['refund_method'],
+                    'notes'           => $refundData['notes'] ?? null,
+                    'created_by'      => auth()->id(),
+                ]);
+            }
+        });
+
+        if ($change > 0) {
+            Notification::make()
+                ->title('تم استلام الدفع')
+                ->body('تم إنشاء طلب استرداد الباقي ' . number_format($change, 2) . ' ₪')
+                ->success()
+                ->persistent()
+                ->send();
+
+            return;
+        }
+
+        Notification::make()->title('تم استلام الدفع')->success()->send();
+    }
+
     /** Move an order one step along its own ladder. */
     public function advance(string $reference, string $status): void
     {
@@ -294,12 +371,33 @@ class CashierBoard extends Page
             return;
         }
 
-        $order->update(array_filter([
-            'status'       => $status,
-            'delivered_at' => $status === Order::FULFILMENT_DELIVERED ? now() : $order->delivered_at,
-            'received_at'  => $status === Order::FULFILMENT_RECEIVED ? now() : $order->received_at,
-            'cancelled_at' => $status === Order::FULFILMENT_CANCELLED ? now() : $order->cancelled_at,
-        ], fn ($value) => $value !== null));
+        DB::transaction(function () use ($order, $status) {
+            $order->update(array_filter([
+                'status'       => $status,
+                'delivered_at' => $status === Order::FULFILMENT_DELIVERED ? now() : $order->delivered_at,
+                'received_at'  => $status === Order::FULFILMENT_RECEIVED ? now() : $order->received_at,
+                'cancelled_at' => $status === Order::FULFILMENT_CANCELLED ? now() : $order->cancelled_at,
+            ], fn ($value) => $value !== null));
+
+            // Auto-create driver settlement when a delivery is marked received
+            if ($status === Order::FULFILMENT_RECEIVED
+                && $order->delivery_method === 'delivery'
+                && $order->driver_id !== null
+            ) {
+                DriverSettlement::firstOrCreate(
+                    ['order_id' => $order->getKey()],
+                    [
+                        'driver_id'       => $order->driver_id,
+                        'shift_id'        => $this->shift()?->getKey(),
+                        'order_reference' => $order->reference,
+                        'order_total'     => $order->total,
+                        'payment_method'  => $order->payment_method,
+                        'cash_collected'  => in_array($order->payment_method, Order::IN_STORE_METHODS, true),
+                        'delivered_at'    => now(),
+                    ],
+                );
+            }
+        });
 
         Notification::make()->title('تم تحديث الحالة')->success()->send();
     }
@@ -416,5 +514,71 @@ class CashierBoard extends Page
         }
 
         Notification::make()->title('تم الاسترداد إلى محفظة الزبون')->success()->send();
+    }
+
+    /**
+     * Send a receipt straight to the network printer, no browser window.
+     *
+     * Falls back gracefully: the JS side opens the browser path if this
+     * returns success = false.
+     *
+     * @return array{success: bool, error: string|null}
+     */
+    public function printDirect(string $reference): array
+    {
+        $order = Order::with('items', 'paidBy')->where('reference', $reference)->firstOrFail();
+
+        $printer = app(ReceiptPrinter::class);
+
+        if (! $printer->networkAvailable()) {
+            return ['success' => false, 'error' => 'الطابعة الشبكية غير متصلة'];
+        }
+
+        $success = $printer->printToNetwork($order);
+
+        return [
+            'success' => $success,
+            'error'   => $success ? null : ($order->fresh()->print_error ?? 'خطأ غير معروف'),
+        ];
+    }
+
+    /**
+     * Driver delivery summary for the current shift.
+     *
+     * Groups settlements by driver and returns totals — the answer to
+     * "how much should each driver hand back at the end of the day".
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function driverSettlements(): array
+    {
+        $shift = $this->shift();
+        $since = $shift?->opened_at ?? now()->subHours(12);
+
+        return DriverSettlement::with('driver')
+            ->where('created_at', '>=', $since)
+            ->get()
+            ->groupBy('driver_id')
+            ->map(function ($settlements) {
+                $driver = $settlements->first()->driver;
+
+                return [
+                    'driver_name'     => $driver?->name ?? '—',
+                    'driver_company'  => $driver?->company,
+                    'driver_phone'    => $driver?->phone,
+                    'total_orders'    => $settlements->count(),
+                    'total_amount'    => round($settlements->sum('order_total'), 2),
+                    'cash_collected'  => round($settlements->where('cash_collected', true)->sum('order_total'), 2),
+                    'orders'          => $settlements->map(fn ($s) => [
+                        'reference'      => $s->order_reference,
+                        'total'          => $s->order_total,
+                        'payment_method' => $s->payment_method,
+                        'cash_collected' => $s->cash_collected,
+                        'delivered_at'   => $s->delivered_at?->format('H:i'),
+                    ])->values()->all(),
+                ];
+            })
+            ->values()
+            ->all();
     }
 }
