@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\PaymentAccountResource\Pages;
 use App\Models\Order;
 use App\Models\PaymentAccount;
+use App\Models\User;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -51,12 +52,17 @@ class PaymentAccountResource extends Resource
                     ->placeholder('شركة جلاسيه الأمير'),
 
                 Forms\Components\TextInput::make('bank_name')
-                    ->label('اسم البنك')
+                    ->label('اسم البنك / المزود')
                     ->maxLength(190)
                     ->placeholder('بنك فلسطين')
-                    // Wallets have no bank; handoff 13 says to leave it out.
-                    ->helperText('للحسابات البنكية فقط — يُترك فارغاً للمحافظ')
-                    ->visible(fn (Forms\Get $get) => $get('method') === 'bop'),
+                    ->helperText('اسم البنك أو مزود الخدمة'),
+
+                Forms\Components\TextInput::make('account_number')
+                    ->label('رقم الحساب')
+                    ->maxLength(190)
+                    ->placeholder('1234-5678-9012')
+                    ->helperText('رقم الحساب البنكي أو رقم المحفظة')
+                    ->visible(fn (Forms\Get $get) => in_array($get('method'), Order::RECEIPT_METHODS, true)),
 
                 Forms\Components\Toggle::make('active')->label('مفعّل')->default(true),
             ])->columns(2),
@@ -133,7 +139,8 @@ class PaymentAccountResource extends Resource
             ->reorderable('sort_order')
             ->actions([
                 Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\DeleteAction::make()
+                    ->visible(fn () => auth()->user()->isManager()),
             ])
             ->emptyStateHeading('لا توجد حسابات دفع')
             ->emptyStateDescription('أضف حساب المحل لكل طريقة تحويل يدوي يستخدمها الزبائن.');

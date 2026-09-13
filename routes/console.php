@@ -9,4 +9,6 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 // Auto-confirm delivery orders after the configured timeout
-Schedule::command('orders:auto-confirm')->everyFiveMinutes();
+Schedule::command('orders:auto-confirm')
+    ->everyFiveMinutes()
+    ->appendOutputTo(storage_path('logs/auto-confirm.log'));

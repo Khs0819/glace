@@ -45,7 +45,7 @@ class PaymentAccount extends Model
     }
 
     protected $fillable = [
-        'method', 'qr_image', 'holder_name', 'bank_name',
+        'method', 'qr_image', 'holder_name', 'bank_name', 'account_number',
         'primary_label', 'primary_value', 'secondary_label', 'secondary_value',
         'sort_order', 'active',
     ];

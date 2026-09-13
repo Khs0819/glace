@@ -43,7 +43,7 @@ class CashierShiftResource extends Resource
 
     public static function canDelete(Model $record): bool
     {
-        return false;
+        return auth()->user()?->isManager() ?? false;
     }
 
     public static function getNavigationBadge(): ?string
@@ -155,7 +155,11 @@ class CashierShiftResource extends Resource
                     ->label('الكاشير')
                     ->relationship('user', 'name'),
             ])
-            ->actions([Tables\Actions\ViewAction::make()])
+            ->actions([
+                Tables\Actions\ViewAction::make(),
+                Tables\Actions\DeleteAction::make()
+                    ->visible(fn () => auth()->user()?->isManager()),
+            ])
             ->emptyStateHeading('لا توجد ورديات')
             ->emptyStateDescription('تُفتح الورديات من شاشة الكاشير.');
     }

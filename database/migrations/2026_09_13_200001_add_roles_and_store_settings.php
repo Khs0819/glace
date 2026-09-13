@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -23,6 +24,12 @@ return new class extends Migration
         Schema::table('users', function (Blueprint $table) {
             $table->string('role')->default('manager')->after('email');
         });
+
+        if (! Schema::hasColumn('payment_accounts', 'account_number')) {
+            Schema::table('payment_accounts', function (Blueprint $table) {
+                $table->string('account_number')->nullable()->after('bank_name');
+            });
+        }
 
         Schema::create('store_settings', function (Blueprint $table) {
             $table->string('key')->primary();
