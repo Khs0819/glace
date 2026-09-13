@@ -25,6 +25,16 @@ use Illuminate\Support\Facades\Route;
 // Home page aggregate
 Route::get('/home', HomeController::class);
 
+// Store status (open/closed, delivery available)
+Route::get('/store/status', function () {
+    return response()->json([
+        'storeOpen'          => \App\Models\StoreSetting::isStoreOpen(),
+        'deliveryOpen'       => \App\Models\StoreSetting::isDeliveryOpen(),
+        'closedMessage'      => \App\Models\StoreSetting::closedMessage(),
+        'autoConfirmMinutes' => \App\Models\StoreSetting::autoConfirmMinutes(),
+    ]);
+});
+
 // Events
 Route::get('/events', [EventController::class, 'index']);
 Route::get('/events/{id}', [EventController::class, 'show'])->whereNumber('id');

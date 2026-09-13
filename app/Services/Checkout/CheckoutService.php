@@ -32,6 +32,22 @@ class CheckoutService
      */
     public function place(array $payload): Order
     {
+        // ── Store / delivery closure gates ────────────────────────────────
+        if (! \App\Models\StoreSetting::isStoreOpen()) {
+            throw ValidationException::withMessages([
+                'store' => \App\Models\StoreSetting::closedMessage(),
+            ]);
+        }
+
+        if (
+            ($payload['delivery_method'] ?? null) === 'delivery'
+            && ! \App\Models\StoreSetting::isDeliveryOpen()
+        ) {
+            throw ValidationException::withMessages([
+                'delivery_method' => 'التوصيل غير متاح حالياً — يمكنك الاستلام من المحل',
+            ]);
+        }
+
         $cart = $this->pricer->price($payload['items']);
 
         if ($cart->totalAgorot() <= 0) {

@@ -15,9 +15,27 @@ class User extends Authenticatable implements FilamentUser
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
+    public const ROLE_MANAGER    = 'manager';
+    public const ROLE_ACCOUNTANT = 'accountant';
+
+    public const ROLES = [
+        self::ROLE_MANAGER    => 'مدير',
+        self::ROLE_ACCOUNTANT => 'محاسب',
+    ];
+
     public function canAccessPanel(Panel $panel): bool
     {
         return true;
+    }
+
+    public function isManager(): bool
+    {
+        return $this->role === self::ROLE_MANAGER;
+    }
+
+    public function isAccountant(): bool
+    {
+        return $this->role === self::ROLE_ACCOUNTANT;
     }
 
     /**
@@ -29,6 +47,7 @@ class User extends Authenticatable implements FilamentUser
         'name',
         'email',
         'password',
+        'role',
     ];
 
     /**
