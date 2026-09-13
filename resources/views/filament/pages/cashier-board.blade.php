@@ -358,6 +358,10 @@
         }
         .clear-filters-btn:hover { background: #fee2e2; }
 
+        /* All buttons: cursor pointer */
+        button, [role="button"] { cursor: pointer; }
+        button:disabled { cursor: not-allowed !important; opacity: 0.6; }
+
         /* Action buttons */
         .btn-print {
             background: #ea580c;
@@ -370,6 +374,7 @@
             align-items: center;
             gap: 0.3rem;
             transition: all 0.15s;
+            cursor: pointer;
         }
         .btn-print:hover { background: #c2410c; }
 
@@ -385,6 +390,7 @@
             align-items: center;
             gap: 0.3rem;
             transition: all 0.15s;
+            cursor: pointer;
         }
         .dark .btn-update-status { background: #1f2937; color: #d1d5db; border-color: #4b5563; }
         .btn-update-status:hover { background: #f3f4f6; border-color: #9ca3af; }
@@ -401,6 +407,7 @@
             align-items: center;
             gap: 0.3rem;
             transition: all 0.15s;
+            cursor: pointer;
         }
         .btn-assign-driver:hover { background: #0369a1; }
 
@@ -415,6 +422,7 @@
             align-items: center;
             gap: 0.3rem;
             transition: all 0.15s;
+            cursor: pointer;
         }
         .btn-pay:hover { background: #15803d; }
 
@@ -429,8 +437,36 @@
             align-items: center;
             gap: 0.3rem;
             transition: all 0.15s;
+            cursor: pointer;
         }
         .btn-refund:hover { background: #b91c1c; }
+
+        /* Modal confirm/cancel buttons — force visible solid colors */
+        .modal-btn-confirm {
+            padding: 0.5rem 1.25rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 700;
+            color: white;
+            transition: all 0.15s;
+            cursor: pointer;
+            border: none;
+        }
+        .modal-btn-confirm:disabled { opacity: 0.4; cursor: not-allowed; }
+        .modal-btn-cancel {
+            padding: 0.5rem 1.25rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 700;
+            background: #f3f4f6;
+            color: #374151;
+            border: 1.5px solid #d1d5db;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .modal-btn-cancel:hover { background: #e5e7eb; }
+        .dark .modal-btn-cancel { background: #374151; color: #d1d5db; border-color: #4b5563; }
+        .dark .modal-btn-cancel:hover { background: #4b5563; }
 
         /* Sort dropdown */
         .sort-dropdown {
@@ -857,6 +893,16 @@
                         </div>
                     </template>
 
+                    {{-- Create refund for already-paid cash orders --}}
+                    <template x-if="order.paid && order.paymentMethod === 'cash' && !order.final">
+                        <div class="mb-3">
+                            <button class="btn-refund w-full justify-center" style="background:#d97706; padding:0.5rem 1rem; font-size:0.8rem;"
+                                    @click="openStandaloneRefundModal(order)">
+                                ↩️ إنشاء طلب استرداد
+                            </button>
+                        </div>
+                    </template>
+
                     {{-- Time + actions --}}
                     <div class="flex items-center justify-between flex-wrap gap-2">
                         <div class="flex items-center gap-1 text-xs text-gray-400">
@@ -948,15 +994,12 @@
                     </div>
 
                     <div class="px-5 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-end gap-2">
-                        <button
-                            @click="closeModal()"
-                            class="px-4 py-2 rounded-lg text-sm font-bold border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800"
-                        >إلغاء</button>
+                        <button @click="closeModal()" class="modal-btn-cancel">إلغاء</button>
                         <button
                             @click="confirmDriver()"
                             :disabled="!modal.selectedDriverId"
-                            class="px-4 py-2 rounded-lg text-sm font-bold text-white transition"
-                            :class="modal.selectedDriverId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-300 cursor-not-allowed'"
+                            class="modal-btn-confirm"
+                            :style="modal.selectedDriverId ? 'background:#2563eb' : 'background:#9ca3af'"
                         >✅ تأكيد التعيين</button>
                     </div>
                 </div>
@@ -1002,15 +1045,12 @@
                     </div>
 
                     <div class="px-5 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-end gap-2">
-                        <button
-                            @click="closeModal()"
-                            class="px-4 py-2 rounded-lg text-sm font-bold border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800"
-                        >إلغاء</button>
+                        <button @click="closeModal()" class="modal-btn-cancel">إلغاء</button>
                         <button
                             @click="confirmStatus()"
                             :disabled="!modal.selectedStatus"
-                            class="px-4 py-2 rounded-lg text-sm font-bold text-white transition"
-                            :class="modal.selectedStatus ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-300 cursor-not-allowed'"
+                            class="modal-btn-confirm"
+                            :style="modal.selectedStatus ? 'background:#2563eb' : 'background:#9ca3af'"
                         >✅ تأكيد</button>
                     </div>
                 </div>
@@ -1077,14 +1117,87 @@
                     </div>
 
                     <div class="px-5 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-end gap-2">
-                        <button @click="closeModal()"
-                            class="px-4 py-2 rounded-lg text-sm font-bold border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800"
-                        >إلغاء</button>
+                        <button @click="closeModal()" class="modal-btn-cancel">إلغاء</button>
                         <button @click="confirmRefund()"
                             :disabled="!modal.refundMethod"
-                            class="px-4 py-2 rounded-lg text-sm font-bold text-white transition"
-                            :class="modal.refundMethod ? 'bg-amber-600 hover:bg-amber-700' : 'bg-gray-300 cursor-not-allowed'"
+                            class="modal-btn-confirm"
+                            :style="modal.refundMethod ? 'background:#d97706' : 'background:#9ca3af'"
                         >✅ استلام + إنشاء طلب الاسترداد</button>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        {{-- ─── standalone refund modal (for already-paid orders) ──────────── --}}
+        <template x-if="modal.type === 'standalone-refund'">
+            <div class="modal-overlay" @click.self="closeModal()">
+                <div class="modal-content">
+                    <div class="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <div class="text-lg font-bold">↩️ إنشاء طلب استرداد</div>
+                                <div class="text-sm text-gray-500" x-text="'الطلب: ' + modal.reference + ' — الإجمالي: ' + Number(modal.orderTotal).toFixed(2) + ' ₪'"></div>
+                            </div>
+                            <button @click="closeModal()" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+                        </div>
+                    </div>
+
+                    <div class="p-5 space-y-3">
+                        <div>
+                            <label class="block text-sm font-bold mb-1">💰 مبلغ الاسترداد (₪)</label>
+                            <input type="number" step="0.01" min="0.01"
+                                :max="modal.orderTotal"
+                                x-model.number="modal.refundAmount"
+                                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 text-sm px-3 py-2 font-bold"
+                                placeholder="أدخل مبلغ الاسترداد">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-bold mb-1">👤 اسم صاحب الحساب</label>
+                            <input type="text" x-model="modal.holderName"
+                                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 text-sm px-3 py-2">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-bold mb-1">📞 رقم جوال صاحب الحساب</label>
+                            <input type="text" x-model="modal.holderPhone"
+                                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 text-sm px-3 py-2">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-bold mb-1">💳 وسيلة الاسترداد</label>
+                            <div class="grid grid-cols-2 gap-2 mt-1">
+                                <template x-for="method in refundMethods" :key="method.value">
+                                    <div
+                                        class="status-option text-sm"
+                                        :class="modal.refundMethod === method.value ? 'selected' : ''"
+                                        @click="modal.refundMethod = method.value"
+                                    >
+                                        <span class="w-4 h-4 rounded-full border-2 flex items-center justify-center"
+                                              :class="modal.refundMethod === method.value ? 'border-blue-600' : 'border-gray-300'">
+                                            <span x-show="modal.refundMethod === method.value" class="w-2 h-2 rounded-full bg-blue-600"></span>
+                                        </span>
+                                        <span x-text="method.icon + ' ' + method.label"></span>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-bold mb-1">📝 ملاحظات (اختياري)</label>
+                            <textarea x-model="modal.refundNotes" rows="2"
+                                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 text-sm px-3 py-2"
+                                placeholder="أي ملاحظات إضافية..."></textarea>
+                        </div>
+                    </div>
+
+                    <div class="px-5 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-end gap-2">
+                        <button @click="closeModal()" class="modal-btn-cancel">إلغاء</button>
+                        <button @click="confirmStandaloneRefund()"
+                            :disabled="!modal.refundMethod || !modal.refundAmount"
+                            class="modal-btn-confirm"
+                            :style="(modal.refundMethod && modal.refundAmount) ? 'background:#d97706' : 'background:#9ca3af'"
+                        >✅ إنشاء طلب الاسترداد</button>
                     </div>
                 </div>
             </div>
@@ -1348,15 +1461,26 @@
                         if (result.success) {
                             this.printed.add(order.reference);
                             this.refresh();
+                            this.showAlert('✅ تمت الطباعة بنجاح', 'تم إرسال الإيصال للطابعة — الطلب: ' + order.reference, 'success');
                         } else {
-                            // Fallback to browser print
+                            this.showAlert('⚠️ الطابعة غير متصلة', 'سيتم فتح نافذة الطباعة بدلاً...', 'warning');
                             this.print(order, false);
                         }
                     } catch (e) {
+                        this.showAlert('❌ خطأ في الطباعة', 'سيتم فتح نافذة الطباعة بدلاً...', 'error');
                         this.print(order, false);
                     } finally {
                         this.printing[order.reference] = false;
                     }
+                },
+
+                showAlert(title, body, type) {
+                    this.$dispatch('notification', {
+                        title: title,
+                        body: body,
+                        color: type === 'success' ? 'success' : type === 'warning' ? 'warning' : 'danger',
+                        duration: 5000,
+                    });
                 },
 
                 // ─── modals ─────────────────────────────────────────────────
@@ -1443,6 +1567,37 @@
                     await this.$wire.markPaidWithChange(
                         this.modal.reference,
                         tendered,
+                        {
+                            holder_name: this.modal.holderName,
+                            holder_phone: this.modal.holderPhone,
+                            refund_method: this.modal.refundMethod,
+                            notes: this.modal.refundNotes,
+                        }
+                    );
+                    this.closeModal();
+                    this.refresh();
+                },
+
+                // Standalone refund for already-paid cash orders
+                openStandaloneRefundModal(order) {
+                    this.modal = {
+                        type: 'standalone-refund',
+                        reference: order.reference,
+                        refundAmount: 0,
+                        holderName: order.customerName || '',
+                        holderPhone: order.customerPhone || '',
+                        refundMethod: null,
+                        refundNotes: '',
+                        orderTotal: order.total,
+                        options: [], drivers: [], selectedDriverId: null, selectedStatus: null, currentStatus: null,
+                    };
+                },
+
+                async confirmStandaloneRefund() {
+                    if (!this.modal.refundMethod || !this.modal.refundAmount) return;
+                    await this.$wire.createStandaloneRefund(
+                        this.modal.reference,
+                        this.modal.refundAmount,
                         {
                             holder_name: this.modal.holderName,
                             holder_phone: this.modal.holderPhone,

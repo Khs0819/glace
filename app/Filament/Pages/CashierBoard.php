@@ -517,6 +517,50 @@ class CashierBoard extends Page
     }
 
     /**
+     * Create a standalone refund request for an already-paid order.
+     *
+     * Used when the cashier receives cash and needs to return change via
+     * a transfer method (since the store does not return physical cash).
+     */
+    public function createStandaloneRefund(string $reference, float $amount, array $refundData): void
+    {
+        $order = Order::with('customer')->where('reference', $reference)->firstOrFail();
+
+        if ($amount <= 0) {
+            Notification::make()->title('المبلغ يجب أن يكون أكبر من صفر')->danger()->send();
+            return;
+        }
+
+        if ($amount > $order->total) {
+            Notification::make()->title('المبلغ أكبر من إجمالي الطلب')->danger()->send();
+            return;
+        }
+
+        if (empty($refundData['refund_method'])) {
+            Notification::make()->title('اختر وسيلة الاسترداد')->danger()->send();
+            return;
+        }
+
+        ChangeRefundRequest::create([
+            'order_id'        => $order->getKey(),
+            'order_reference' => $order->reference,
+            'amount'          => $amount,
+            'holder_name'     => $refundData['holder_name'] ?? $order->customer_name ?? '',
+            'holder_phone'    => $refundData['holder_phone'] ?? $order->customer_phone ?? '',
+            'refund_method'   => $refundData['refund_method'],
+            'notes'           => $refundData['notes'] ?? null,
+            'created_by'      => auth()->id(),
+        ]);
+
+        Notification::make()
+            ->title('تم إنشاء طلب الاسترداد')
+            ->body('مبلغ ' . number_format($amount, 2) . ' ₪ — سيتم تحويله في نهاية الوردية')
+            ->success()
+            ->persistent()
+            ->send();
+    }
+
+    /**
      * Send a receipt straight to the network printer, no browser window.
      *
      * Falls back gracefully: the JS side opens the browser path if this
