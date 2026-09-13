@@ -32,10 +32,12 @@ function signedIn(?Customer $customer = null): array
 
 // ─── sending ────────────────────────────────────────────────────────────────
 
-it('texts a code without revealing whether the number has an account', function () {
+it('texts a code and tells the frontend whether the account exists', function () {
     $response = test()->postJson('/api/auth/otp/send', ['phone' => '0599123456']);
 
-    $response->assertOk()->assertJson(['message' => 'تم إرسال رمز التحقق']);
+    $response->assertOk()
+        ->assertJson(['success' => true, 'message' => 'تم إرسال رمز التحقق'])
+        ->assertJsonPath('data.userExists', false);
 
     expect(OtpCode::where('phone', '0599123456')->count())->toBe(1);
 });
@@ -116,11 +118,12 @@ it('creates the account on a first sight of a number', function () {
         'fullName' => 'أحمد علي',
     ])
         ->assertOk()
-        ->assertJsonStructure(['token', 'user' => ['id', 'name', 'email', 'phone']])
-        ->assertJsonPath('user.name', 'أحمد علي')
-        ->assertJsonPath('user.phone', '0599123456')
+        ->assertJson(['success' => true])
+        ->assertJsonStructure(['data' => ['token', 'user' => ['id', 'name', 'email', 'phone']]])
+        ->assertJsonPath('data.user.name', 'أحمد علي')
+        ->assertJsonPath('data.user.phone', '0599123456')
         // Never null: the storefront types it as `string`.
-        ->assertJsonPath('user.email', '');
+        ->assertJsonPath('data.user.email', '');
 
     expect(Customer::where('phone', '0599123456')->exists())->toBeTrue();
 });
@@ -142,7 +145,7 @@ it('keeps the stored name when a returning customer sends a different one', func
         'phone'    => '0599123456',
         'code'     => '482913',
         'fullName' => 'اسم آخر',
-    ])->assertOk()->assertJsonPath('user.name', 'أحمد علي');
+    ])->assertOk()->assertJsonPath('data.user.name', 'أحمد علي');
 
     expect($customer->fresh()->name)->toBe('أحمد علي');
 });
@@ -207,7 +210,7 @@ it('stores only the hash of an issued token', function () {
 
     $token = test()->postJson('/api/auth/otp/verify', [
         'phone' => '0599123456', 'code' => '482913', 'fullName' => 'أحمد',
-    ])->json('token');
+    ])->json('data.token');
 
     $stored = Customer::sole()->tokens()->sole();
 

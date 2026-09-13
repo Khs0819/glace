@@ -33,12 +33,29 @@ class AuthController extends Controller
         private readonly CustomerAuthService $auth,
     ) {}
 
-    /** Text a code to the number. Says nothing about whether an account exists. */
+    /**
+     * Text a code to the number.
+     *
+     * Returns whether an account already exists for this number, so the
+     * frontend can decide whether to show the name field (new user) or
+     * skip straight to OTP entry (returning user).
+     */
     public function sendOtp(SendOtpRequest $request): JsonResponse
     {
-        $this->otp->send($request->validated('phone'));
+        $phone = $request->validated('phone');
 
-        return response()->json(['message' => 'تم إرسال رمز التحقق']);
+        $this->otp->send($phone);
+
+        $normalized  = PhoneNumber::normalize($phone);
+        $userExists  = $normalized !== null && Customer::where('phone', $normalized)->exists();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم إرسال رمز التحقق',
+            'data'    => [
+                'userExists' => $userExists,
+            ],
+        ]);
     }
 
     /**
@@ -56,8 +73,12 @@ class AuthController extends Controller
         $customer = $this->auth->resolveCustomer($data['phone'], $data['fullName'] ?? null);
 
         return response()->json([
-            'token' => $this->auth->issueToken($customer, $request),
-            'user'  => new CustomerResource($customer),
+            'success' => true,
+            'message' => 'تم تسجيل الدخول بنجاح',
+            'data'    => [
+                'token' => $this->auth->issueToken($customer, $request),
+                'user'  => new CustomerResource($customer),
+            ],
         ]);
     }
 

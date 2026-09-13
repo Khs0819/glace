@@ -76,6 +76,10 @@ RUN chown -R www-data:www-data /var/lib/nginx \
 
 EXPOSE 80
 
+# Persistent volumes — uploaded media and logs survive container rebuilds.
+VOLUME /var/www/html/storage/app/public
+VOLUME /var/www/html/storage/logs
+
 # public/storage -> storage/app/public. Without it every uploaded image 404s,
 # because the contract serves media from /storage/... on the public disk.
 # Re-created on each boot since storage is usually a mounted volume.
