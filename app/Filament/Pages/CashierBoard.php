@@ -586,6 +586,17 @@ class CashierBoard extends Page
         ];
     }
 
+    /** Alert the cashier about the print result. */
+    public function sendPrintAlert(string $title, string $body, string $type): void
+    {
+        Notification::make()
+            ->title($title)
+            ->body($body)
+            ->color($type)
+            ->duration(5000)
+            ->send();
+    }
+
     /**
      * Driver delivery summary for the current shift.
      *

@@ -9,9 +9,9 @@ use Illuminate\Console\Command;
 /**
  * Auto-confirm delivery orders that the customer hasn't confirmed.
  *
- * Scheduled to run every 5 minutes. If a delivery order has been in
- * "تم التسليم" (delivered) for longer than the configured auto-confirm
- * window, it is moved to "تم الاستلام" (received).
+ * Scheduled to run every 5 minutes. If a delivery order has been
+ * "في الطريق" (on the way) for longer than the configured window,
+ * it is moved to "تم الاستلام" (received).
  */
 class AutoConfirmDelivery extends Command
 {
@@ -23,7 +23,7 @@ class AutoConfirmDelivery extends Command
         $minutes = StoreSetting::autoConfirmMinutes();
         $cutoff  = now()->subMinutes($minutes);
 
-        $orders = Order::where('status', Order::FULFILMENT_DELIVERED)
+        $orders = Order::where('status', Order::FULFILMENT_ON_WAY)
             ->where('delivery_method', 'delivery')
             ->where('updated_at', '<=', $cutoff)
             ->get();

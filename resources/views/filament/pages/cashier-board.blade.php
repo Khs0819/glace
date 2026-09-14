@@ -1461,26 +1461,17 @@
                         if (result.success) {
                             this.printed.add(order.reference);
                             this.refresh();
-                            this.showAlert('✅ تمت الطباعة بنجاح', 'تم إرسال الإيصال للطابعة — الطلب: ' + order.reference, 'success');
+                            await this.$wire.sendPrintAlert('✅ تمت الطباعة بنجاح', 'تم إرسال الإيصال للطابعة — الطلب: ' + order.reference, 'success');
                         } else {
-                            this.showAlert('⚠️ الطابعة غير متصلة', 'سيتم فتح نافذة الطباعة بدلاً...', 'warning');
+                            await this.$wire.sendPrintAlert('⚠️ الطابعة غير متصلة', 'سيتم فتح نافذة الطباعة بدلاً...', 'warning');
                             this.print(order, false);
                         }
                     } catch (e) {
-                        this.showAlert('❌ خطأ في الطباعة', 'سيتم فتح نافذة الطباعة بدلاً...', 'error');
+                        await this.$wire.sendPrintAlert('❌ خطأ في الطباعة', 'سيتم فتح نافذة الطباعة بدلاً...', 'danger');
                         this.print(order, false);
                     } finally {
                         this.printing[order.reference] = false;
                     }
-                },
-
-                showAlert(title, body, type) {
-                    this.$dispatch('notification', {
-                        title: title,
-                        body: body,
-                        color: type === 'success' ? 'success' : type === 'warning' ? 'warning' : 'danger',
-                        duration: 5000,
-                    });
                 },
 
                 // ─── modals ─────────────────────────────────────────────────
