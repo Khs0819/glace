@@ -819,6 +819,15 @@
                             <a class="text-sm text-blue-600 hover:underline" :href="'tel:' + order.customerPhone" x-text="order.customerPhone || '—'"></a>
                         </div>
 
+                        {{-- Whose account a manual transfer came from --}}
+                        <template x-if="order.senderAccountName">
+                            <div class="payment-account-info">
+                                <span>👤</span>
+                                <span>حُوّل من حساب:</span>
+                                <span class="font-bold" x-text="order.senderAccountName"></span>
+                            </div>
+                        </template>
+
                         {{-- Payment account info (for electronic payments) --}}
                         <template x-if="order.paidToAccount">
                             <div class="payment-account-info">
@@ -837,11 +846,19 @@
                         </template>
                     </div>
 
-                    {{-- Customer notes — only when the customer wrote something --}}
+                    {{-- The customer's note about the order — only when there is one --}}
                     <template x-if="order.notes">
                         <div class="mb-3 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-2.5 py-2">
-                            <div class="text-xs font-bold text-amber-700 dark:text-amber-400 mb-0.5">📝 ملاحظات الزبون</div>
+                            <div class="text-xs font-bold text-amber-700 dark:text-amber-400 mb-0.5">📝 ملاحظة الطلب</div>
                             <div class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-line" x-text="order.notes"></div>
+                        </div>
+                    </template>
+
+                    {{-- For the driver: how to reach the door — only on a delivery --}}
+                    <template x-if="order.deliveryMethod === 'delivery' && order.captainNote">
+                        <div class="mb-3 rounded-lg border border-sky-300 bg-sky-50 dark:bg-sky-950/30 dark:border-sky-700 px-2.5 py-2">
+                            <div class="text-xs font-bold text-sky-700 dark:text-sky-400 mb-0.5">🧭 ملاحظة للكابتن</div>
+                            <div class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-line" x-text="order.captainNote"></div>
                         </div>
                     </template>
 
@@ -969,7 +986,7 @@
 
                         <div class="flex items-center gap-1.5 flex-wrap">
                             {{-- Print: from a hidden frame, which a browser never blocks --}}
-                            <button class="btn-print" @click="printOrder(order)" :disabled="printing[order.reference]">
+                            <button type="button" class="btn-print" @click.stop="printOrder({ reference: order.reference })">
                                 <template x-if="printing[order.reference]">
                                     <span>⏳ جاري...</span>
                                 </template>
@@ -1317,8 +1334,15 @@
 
                         <template x-if="details.notes">
                             <div class="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-3 py-2">
-                                <div class="text-xs font-bold text-amber-700 mb-0.5">📝 ملاحظات الزبون</div>
+                                <div class="text-xs font-bold text-amber-700 mb-0.5">📝 ملاحظة الطلب</div>
                                 <div class="whitespace-pre-line" x-text="details.notes"></div>
+                            </div>
+                        </template>
+
+                        <template x-if="details.captainNote">
+                            <div class="rounded-lg border border-sky-300 bg-sky-50 dark:bg-sky-950/30 px-3 py-2">
+                                <div class="text-xs font-bold text-sky-700 mb-0.5">🧭 ملاحظة للكابتن</div>
+                                <div class="whitespace-pre-line" x-text="details.captainNote"></div>
                             </div>
                         </template>
 
@@ -1367,6 +1391,13 @@
                             </template>
                         </div>
 
+                        <template x-if="details.senderAccountName">
+                            <div class="rounded-lg bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 px-3 py-2 flex justify-between gap-2">
+                                <span class="text-gray-500">👤 حُوّل من حساب</span>
+                                <span class="font-bold" x-text="details.senderAccountName"></span>
+                            </div>
+                        </template>
+
                         <template x-if="details.receiptImage || details.receiptNote">
                             <div>
                                 <div class="font-bold mb-1">📎 إشعار الدفع</div>
@@ -1406,7 +1437,7 @@
 
                     <div class="px-5 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-end gap-2">
                         <button @click="details = null" class="modal-btn-cancel">إغلاق</button>
-                        <button @click="printOrder({ reference: details.reference })" class="modal-btn-confirm" style="background:#475569">🖨️ طباعة</button>
+                        <button type="button" @click.stop="printOrder({ reference: details.reference })" class="modal-btn-confirm" style="background:#475569">🖨️ طباعة</button>
                         <template x-if="details.canConfirmTransfer">
                             <button @click="confirmTransfer()" class="modal-btn-confirm" style="background:#16a34a">✅ تأكيد الدفع</button>
                         </template>
@@ -1545,6 +1576,7 @@
                 // not come out.
                 printQueue: [],
                 printBusy: false,
+                printActive: null,
 
                 // Set when a print took long enough that somebody must have
                 // clicked through a print dialog, so the screen can explain
@@ -1663,6 +1695,14 @@
                         this.networkPrinter = !!data.networkPrinter;
                         this.announceNew(data.orders || []);
                         this.orders = data.orders || [];
+
+                        // Self-healing: a "printing" mark with no job behind it
+                        // is cleared, so an indicator can never stick.
+                        Object.keys(this.printing).forEach(ref => {
+                            if (ref !== this.printActive && !this.printQueue.includes(ref)) {
+                                this.printing[ref] = false;
+                            }
+                        });
                         this.connection = { ok: true, error: null, lastOk: Date.now() };
                     } catch (e) {
                         this.connection = { ok: false, lastOk: this.connection.lastOk, error: 'انقطع الاتصال بالخادم — تُعاد المحاولة تلقائياً.' };
@@ -1791,9 +1831,18 @@
                 // never a new window, which a browser blocks when it is not
                 // opened straight from a click.
                 print(order, auto) {
-                    this.printed.add(order.reference);
-                    this.printing[order.reference] = true;
-                    this.printQueue.push(order.reference);
+                    const reference = order.reference;
+
+                    // Already printing or waiting its turn: say so rather than
+                    // queue the same receipt twice.
+                    if (this.printActive === reference || this.printQueue.includes(reference)) {
+                        this.alert('⏳ الفاتورة قيد الطباعة', 'فاتورة الطلب ' + reference + ' في طابور الطباعة', 'warning');
+                        return;
+                    }
+
+                    this.printed.add(reference);
+                    this.printing[reference] = true;
+                    this.printQueue.push(reference);
                     this.pumpPrintQueue();
                 },
 
@@ -1804,6 +1853,7 @@
                     if (!reference) return;
 
                     this.printBusy = true;
+                    this.printActive = reference;
                     let result = { outcome: 'failed', duration: 0 };
 
                     // Whatever happens inside — an error, a frame that never
@@ -1816,6 +1866,7 @@
                         console.warn('[print]', reference, 'error', e);
                     } finally {
                         this.printBusy = false;
+                        this.printActive = null;
                         this.printing[reference] = false;
                     }
 

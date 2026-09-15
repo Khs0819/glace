@@ -33,6 +33,9 @@ class ContentController extends Controller
                 'primaryValue'   => $account->primary_value,
                 'secondaryLabel' => $account->secondary_label,
                 'secondaryValue' => $account->secondary_value,
+                // The account the customer transfers into. It is entered on its
+                // own field in the dashboard and was never sent until now.
+                'accountNumber'  => $account->account_number,
             ], static fn ($value) => $value !== null && $value !== ''));
 
         return response()->json($accounts->values());

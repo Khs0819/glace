@@ -151,10 +151,28 @@ class StoreStorefrontOrderRequest extends FormRequest
             'pickupTime' => ['nullable', 'date'],
             'notes'      => ['nullable', 'string', 'max:1000'],
 
+            // Two notes, for two different readers, and never merged:
+            //   orderNote   — about the order itself ("بدون مكسرات"), from the
+            //                 cart. Read by whoever makes it.
+            //   captainNote — how to reach the door (gate code, floor), from
+            //                 the address. Read by whoever delivers it.
+            // Both must be listed here: validated() drops any field without a
+            // rule, which is how both were being lost without an error.
+            'orderNote'   => ['nullable', 'string', 'max:1000'],
+            'captainNote' => ['nullable', 'string', 'max:1000'],
+
             // Sniffed and size-capped in ReceiptStorage, which does not trust
             // the declared content type.
             'receiptImage' => ['nullable', 'file'],
             'receiptNote'  => ['nullable', 'string', 'max:1000'],
+
+            // Whose account the transfer came from. Required for every manual
+            // transfer, image or not: a receipt proves money moved, and this is
+            // the name the reviewer matches against the bank statement.
+            'senderAccountName' => [
+                'nullable', 'string', 'max:190',
+                Rule::requiredIf(fn () => in_array($this->input('paymentMethod'), Order::RECEIPT_METHODS, true)),
+            ],
 
             // Automatic Jawwal Pay only.
             'jawwalPhone' => ['nullable', 'string', 'max:20'],
@@ -180,6 +198,7 @@ class StoreStorefrontOrderRequest extends FormRequest
             'jawwalCode.regex'              => 'رمز التأكيد غير صحيح',
             'paidAmount.numeric'            => 'المبلغ المدفوع غير صحيح',
             'paidAmount.max'                => 'المبلغ المدفوع كبير جداً',
+            'senderAccountName.required'    => 'اكتب اسم صاحب الحساب الذي حوّلت منه',
         ];
     }
 }

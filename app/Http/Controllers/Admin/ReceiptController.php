@@ -142,11 +142,13 @@ class ReceiptController extends Controller
                 // Shown on the card only when present: a customer's note can be
                 // the one thing the counter must not miss.
                 'notes'          => filled($order->notes) ? $order->notes : null,
+                'captainNote'    => filled($order->captain_note) ? $order->captain_note : null,
                 'deliveryFee'    => (float) $order->delivery_fee,
 
                 // Proof of a transfer, and whether it still needs confirming.
                 'requiresReceipt' => $order->requiresReceipt(),
                 'hasReceipt'      => filled($order->receipt_image) || filled($order->receipt_note),
+                'senderAccountName' => $order->sender_account_name,
 
                 // Cash: what was declared or taken, and the change still owed.
                 // The owed figure is computed here so the counter can never be

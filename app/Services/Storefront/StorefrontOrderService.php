@@ -110,7 +110,10 @@ class StorefrontOrderService
                 'public_token'    => Order::newPublicToken(),
                 'customer_name'   => $address['name'] ?? $customer?->name ?? 'زبون',
                 'customer_phone'  => $address['phone'] ?? $customer?->phone ?? '',
-                'notes'           => $payload['notes'] ?? null,
+                // The order note fills the column the dashboard already shows as
+                // the order's notes; `notes` is still accepted from older clients.
+                'notes'           => $payload['orderNote'] ?? $payload['notes'] ?? null,
+                'captain_note'    => $payload['captainNote'] ?? null,
 
                 // Always "قيد المراجعة", whatever was paid and however
                 // (handoff 12 §4).
@@ -144,6 +147,10 @@ class StorefrontOrderService
 
                 'receipt_image' => $receiptPath,
                 'receipt_note'  => $payload['receiptNote'] ?? null,
+                // Only kept for a manual transfer, where it means something.
+                'sender_account_name' => in_array($paymentMethod, Order::RECEIPT_METHODS, true)
+                    ? (trim((string) ($payload['senderAccountName'] ?? '')) ?: null)
+                    : null,
 
                 'scheduled_for' => $payload['pickupTime'] ?? null,
 

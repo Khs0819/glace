@@ -50,6 +50,7 @@ function postBrowserCart(array $line, array $overrides = [])
         'items'          => json_encode([$line]),
         'paymentMethod'  => 'cash',
         'deliveryMethod' => 'pickup',
+        'senderAccountName' => 'أحمد علي',
     ], $overrides), test()->headers);
 }
 

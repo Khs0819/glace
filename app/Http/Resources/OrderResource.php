@@ -45,6 +45,11 @@ class OrderResource extends JsonResource
             'address' => $this->address,
             'notes'   => $this->notes,
 
+            // Under the names the storefront sends them with. `notes` above is
+            // the same text as orderNote, kept for existing readers.
+            'orderNote'   => $this->notes,
+            'captainNote' => $this->captain_note,
+
             'items' => $this->whenLoaded('items', fn () => $this->items->map(function ($item) {
                 $selection = $item->selection ?? [];
 
@@ -83,6 +88,7 @@ class OrderResource extends JsonResource
 
             'receiptImage' => $this->receiptImageUrl(),
             'receiptNote'  => $this->receipt_note,
+            'senderAccountName' => $this->sender_account_name,
 
             'preparationTime'       => $this->preparation_time,
             'estimatedDeliveryTime' => $this->estimated_delivery_time,

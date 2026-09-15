@@ -325,7 +325,12 @@ class ReceiptDocument
 
         if (filled($this->order->notes)) {
             $rule();
-            $push('ملاحظات: ' . $this->order->notes);
+            $push('ملاحظة الطلب: ' . $this->order->notes, ['bold' => true]);
+        }
+
+        // Only on a delivery slip: it is instructions for the person at the door.
+        if ($this->order->delivery_method === 'delivery' && filled($this->order->captain_note)) {
+            $push('ملاحظة للكابتن: ' . $this->order->captain_note);
         }
 
         $rule();

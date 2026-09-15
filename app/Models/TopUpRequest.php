@@ -30,7 +30,7 @@ class TopUpRequest extends Model
 
     protected $fillable = [
         'customer_id', 'amount', 'method', 'status', 'receipt_image',
-        'receipt_note', 'phone', 'reviewed_by', 'reviewed_at', 'review_note',
+        'receipt_note', 'sender_account_name', 'phone', 'reviewed_by', 'reviewed_at', 'review_note',
         'transaction_id',
     ];
 

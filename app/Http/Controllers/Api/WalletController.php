@@ -163,6 +163,7 @@ class WalletController extends Controller
             'createdAt'    => $request->created_at?->toIso8601String(),
             'receiptImage' => MediaUrl::resolve($request->receipt_image),
             'receiptNote'  => $request->receipt_note,
+            'senderAccountName' => $request->sender_account_name,
             'phone'        => $request->phone,
         ], static fn ($value) => $value !== null);
     }

@@ -800,6 +800,7 @@ class CashierBoard extends Page
             'customerPhone'  => $order->customer_phone,
             'address'        => $order->address,
             'notes'          => filled($order->notes) ? $order->notes : null,
+            'captainNote'    => filled($order->captain_note) ? $order->captain_note : null,
             'scheduledFor'   => $order->scheduled_for?->format('d/m/Y H:i'),
 
             'items' => $order->items->map(fn ($item) => [
@@ -825,6 +826,7 @@ class CashierBoard extends Page
             // The proof of a transfer, read here instead of on the orders page.
             'receiptImage'       => $order->receiptImageUrl(),
             'receiptNote'        => $order->receipt_note,
+            'senderAccountName'  => $order->sender_account_name,
             'canConfirmTransfer' => ! $order->isPaid()
                 && $order->requiresReceipt()
                 && ! in_array($order->status, [Order::FULFILMENT_CANCELLED, Order::FULFILMENT_REFUNDED], true)

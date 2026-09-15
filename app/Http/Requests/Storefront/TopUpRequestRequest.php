@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Storefront;
 
+use App\Models\Order;
 use App\Models\TopUpRequest;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -29,6 +30,13 @@ class TopUpRequestRequest extends FormRequest
             // cannot be matched by the staff member reviewing it.
             'receiptNote' => ['nullable', 'string', 'max:1000', 'required_without:receiptImage'],
 
+            // Whose account the transfer came from — required for the manual
+            // transfer methods, the only ones reviewed against a statement.
+            'senderAccountName' => [
+                'nullable', 'string', 'max:190',
+                Rule::requiredIf(fn () => in_array($this->input('method'), Order::RECEIPT_METHODS, true)),
+            ],
+
             // Only meaningful for the automatic Jawwal flow.
             'phone' => ['nullable', 'string', 'max:20'],
         ];
@@ -43,6 +51,7 @@ class TopUpRequestRequest extends FormRequest
             'method.required'            => 'طريقة الشحن مطلوبة',
             'method.in'                  => 'طريقة الشحن غير مدعومة',
             'receiptNote.required_without' => 'أرفق صورة الإيصال أو اكتب ملاحظة توضح التحويل',
+            'senderAccountName.required'   => 'اكتب اسم صاحب الحساب الذي حوّلت منه',
         ];
     }
 }

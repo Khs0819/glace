@@ -110,6 +110,7 @@ class WalletService
             'status'        => TopUpRequest::STATUS_PENDING,
             'receipt_image' => $data['receiptImage'] ?? null,
             'receipt_note'  => $data['receiptNote'] ?? null,
+            'sender_account_name' => trim((string) ($data['senderAccountName'] ?? '')) ?: null,
             'phone'         => PhoneNumber::normalize($data['phone'] ?? null),
         ]);
     }

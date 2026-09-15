@@ -59,6 +59,8 @@ function storefrontPayload(array $overrides = [], array $itemOverrides = []): ar
         'items'          => json_encode($items),
         'paymentMethod'  => 'cash',
         'deliveryMethod' => 'pickup',
+        // Ignored for cash; required for every manual transfer.
+        'senderAccountName' => 'أحمد علي',
     ], $overrides);
 }
 
@@ -547,7 +549,8 @@ it('replaces a receipt without moving the order status', function () {
     ]), $this->headers)->json('id');
 
     test()->post("/api/orders/{$reference}/receipt", [
-        'receiptImage' => UploadedFile::fake()->image('better.png'),
+        'receiptImage'      => UploadedFile::fake()->image('better.png'),
+        'senderAccountName' => 'أحمد علي',
     ], $this->headers)->assertOk();
 
     expect(Order::where('reference', $reference)->value('status'))->toBe('قيد المراجعة');
@@ -723,4 +726,85 @@ it('accepts the exact total from a guest, because no change is owed', function (
         'paidAmount' => 24,
         'customer'   => ['name' => 'زائر', 'phone' => '0599000111'],
     ]))->assertCreated();
+});
+
+// ─── the two notes ──────────────────────────────────────────────────────────
+
+it('keeps the order note and the captain note apart', function () {
+    test()->post('/api/orders', storefrontPayload([
+        'deliveryMethod' => 'delivery',
+        'paymentMethod'  => 'jawwal-manual',
+        'receiptNote'    => 'حوّلت',
+        'addressId'      => $this->address->id,
+        'orderNote'      => 'بدون مكسرات لو سمحتوا',
+        'captainNote'    => 'الجرس مش شغال، دقوا الباب',
+    ]), $this->headers)
+        ->assertCreated()
+        ->assertJsonPath('orderNote', 'بدون مكسرات لو سمحتوا')
+        ->assertJsonPath('captainNote', 'الجرس مش شغال، دقوا الباب');
+
+    $order = Order::sole();
+
+    // Two readers, two fields: the kitchen's note is not the driver's.
+    expect($order->notes)->toBe('بدون مكسرات لو سمحتوا')
+        ->and($order->captain_note)->toBe('الجرس مش شغال، دقوا الباب');
+});
+
+it('accepts an order with neither note', function () {
+    test()->post('/api/orders', storefrontPayload(), $this->headers)
+        ->assertCreated()
+        ->assertJsonPath('orderNote', null)
+        ->assertJsonPath('captainNote', null);
+});
+
+// ─── who sent the transfer ──────────────────────────────────────────────────
+
+it('requires the sender account name for a manual transfer', function () {
+    test()->post('/api/orders', storefrontPayload([
+        'paymentMethod'     => 'jawwal-manual',
+        'receiptNote'       => 'حوّلت',
+        'senderAccountName' => '',
+    ]), $this->headers)
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('senderAccountName');
+
+    expect(Order::count())->toBe(0);
+});
+
+it('stores and returns the sender account name', function () {
+    test()->post('/api/orders', storefrontPayload([
+        'paymentMethod'     => 'bop',
+        'receiptNote'       => 'حوّلت من بنك فلسطين',
+        'senderAccountName' => 'محمود سالم',
+    ]), $this->headers)
+        ->assertCreated()
+        ->assertJsonPath('senderAccountName', 'محمود سالم');
+
+    expect(Order::sole()->sender_account_name)->toBe('محمود سالم');
+});
+
+it('does not keep a sender name for an order paid at the counter', function () {
+    test()->post('/api/orders', storefrontPayload(), $this->headers)
+        ->assertCreated()
+        ->assertJsonPath('senderAccountName', null);
+});
+
+it('requires and updates the sender name when a receipt is replaced', function () {
+    $reference = test()->post('/api/orders', storefrontPayload([
+        'paymentMethod' => 'jawwal-manual',
+        'receiptNote'   => 'أول ملاحظة',
+    ]), $this->headers)->json('id');
+
+    test()->post("/api/orders/{$reference}/receipt", [
+        'receiptImage' => UploadedFile::fake()->image('slip.png'),
+    ], $this->headers)
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('senderAccountName');
+
+    test()->post("/api/orders/{$reference}/receipt", [
+        'receiptImage'      => UploadedFile::fake()->image('slip.png'),
+        'senderAccountName' => 'محمود سالم',
+    ], $this->headers)
+        ->assertOk()
+        ->assertJsonPath('order.senderAccountName', 'محمود سالم');
 });

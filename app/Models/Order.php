@@ -90,10 +90,10 @@ class Order extends Model
     public const IN_STORE_METHODS = ['cash', 'visa'];
 
     protected $fillable = [
-        'customer_id', 'reference', 'public_token', 'customer_name', 'customer_phone', 'notes',
+        'customer_id', 'reference', 'public_token', 'customer_name', 'customer_phone', 'notes', 'captain_note',
         'status', 'payment_status', 'payment_method', 'delivery_method',
         'address', 'address_id', 'subtotal', 'coupon_code', 'discount', 'delivery_fee',
-        'total', 'currency', 'receipt_image', 'receipt_note',
+        'total', 'currency', 'receipt_image', 'receipt_note', 'sender_account_name',
         'preparation_time', 'estimated_delivery_time', 'driver', 'driver_assigned_at',
         'scheduled_for', 'cancel_reason', 'cancelled_at', 'received_at', 'delivered_at', 'paid_at',
         'table_number', 'printed_at', 'print_count', 'print_error',

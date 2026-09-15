@@ -367,3 +367,26 @@ it('returns both side panels in a single call', function () {
         ->and($panels['drivers'][0]['name'])->toBe('أحمد سعيد')
         ->and($panels['refunds'])->toBe([]);
 });
+
+it('carries the captain note to the board and the details window', function () {
+    boardShift();
+    $order = boardDelivery(10);
+    $order->update(['captain_note' => 'الطابق الثالث']);
+
+    $feed = collect($this->getJson(route('receipts.queue'))->json('orders'))->firstWhere('reference', $order->reference);
+
+    expect($feed['captainNote'])->toBe('الطابق الثالث')
+        ->and(Livewire::test(CashierBoard::class)->instance()->orderDetails($order->reference)['captainNote'])
+        ->toBe('الطابق الثالث');
+});
+
+it('shows who sent a transfer on the board and in the details window', function () {
+    boardShift();
+    $order = boardOrder(['payment_method' => 'bop', 'receipt_note' => 'x', 'sender_account_name' => 'محمود سالم']);
+
+    $feed = collect($this->getJson(route('receipts.queue'))->json('orders'))->firstWhere('reference', $order->reference);
+
+    expect($feed['senderAccountName'])->toBe('محمود سالم')
+        ->and(Livewire::test(CashierBoard::class)->instance()->orderDetails($order->reference)['senderAccountName'])
+        ->toBe('محمود سالم');
+});

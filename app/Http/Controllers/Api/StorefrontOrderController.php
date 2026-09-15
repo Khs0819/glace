@@ -126,10 +126,12 @@ class StorefrontOrderController extends Controller
         }
 
         $request->validate([
-            'receiptImage' => ['nullable', 'file'],
-            'receiptNote'  => ['nullable', 'string', 'max:1000', 'required_without:receiptImage'],
+            'receiptImage'      => ['nullable', 'file'],
+            'receiptNote'       => ['nullable', 'string', 'max:1000', 'required_without:receiptImage'],
+            'senderAccountName' => ['required', 'string', 'max:190'],
         ], [
             'receiptNote.required_without' => 'أرفق صورة الإيصال أو اكتب ملاحظة توضح التحويل',
+            'senderAccountName.required'   => 'اكتب اسم صاحب الحساب الذي حوّلت منه',
         ]);
 
         $order->update([
@@ -139,6 +141,7 @@ class StorefrontOrderController extends Controller
                 'receipts',
             ),
             'receipt_note' => $request->input('receiptNote', $order->receipt_note),
+            'sender_account_name' => trim((string) $request->input('senderAccountName')),
         ]);
 
         return response()->json(['order' => new OrderResource($order->fresh('items'))]);

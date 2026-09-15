@@ -79,6 +79,14 @@ class TopUpRequestResource extends Resource
             ])->columns(3),
 
             Infolists\Components\Section::make('إثبات التحويل')->schema([
+                // The name to match against the incoming transfer.
+                Infolists\Components\TextEntry::make('sender_account_name')
+                    ->label('حُوّل من حساب')
+                    ->weight(\Filament\Support\Enums\FontWeight::Bold)
+                    ->copyable()
+                    ->placeholder('—')
+                    ->columnSpanFull(),
+
                 Infolists\Components\ImageEntry::make('receipt_image')
                     ->label('صورة الإيصال')
                     ->disk('public')
@@ -125,6 +133,11 @@ class TopUpRequestResource extends Resource
                     ->weight(\Filament\Support\Enums\FontWeight::SemiBold),
 
                 Tables\Columns\TextColumn::make('method')->label('الطريقة')->badge(),
+
+                Tables\Columns\TextColumn::make('sender_account_name')
+                    ->label('حُوّل من حساب')
+                    ->searchable()
+                    ->placeholder('—'),
 
                 Tables\Columns\IconColumn::make('receipt_image')
                     ->label('إيصال')

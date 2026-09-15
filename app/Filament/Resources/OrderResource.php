@@ -123,7 +123,11 @@ class OrderResource extends Resource
                         ->copyable()
                         ->icon('heroicon-m-phone'),
                     Infolists\Components\TextEntry::make('notes')
-                        ->label('ملاحظات')
+                        ->label('ملاحظة الطلب')
+                        ->placeholder('—')
+                        ->columnSpanFull(),
+                    Infolists\Components\TextEntry::make('captain_note')
+                        ->label('ملاحظة للكابتن (العنوان)')
                         ->placeholder('—')
                         ->columnSpanFull(),
                 ])->columns(2),
@@ -174,6 +178,13 @@ class OrderResource extends Resource
             Infolists\Components\Section::make('إيصال التحويل')
                 ->icon('heroicon-o-document-check')
                 ->schema([
+                    // The name to match against the incoming transfer.
+                    Infolists\Components\TextEntry::make('sender_account_name')
+                        ->label('حُوّل من حساب')
+                        ->weight(\Filament\Support\Enums\FontWeight::Bold)
+                        ->copyable()
+                        ->placeholder('—')
+                        ->columnSpanFull(),
                     Infolists\Components\ImageEntry::make('receipt_image')
                         ->label('الصورة')->disk('public')->height(320)->placeholder('لم تُرفق صورة'),
                     Infolists\Components\TextEntry::make('receipt_note')

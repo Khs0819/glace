@@ -137,6 +137,7 @@ it('logs a top-up request without adding a shekel', function () {
     test()->post('/api/wallet/topup-requests', [
         'amount'       => 50,
         'method'       => 'bop',
+        'senderAccountName' => 'أحمد علي',
         'receiptImage' => UploadedFile::fake()->image('receipt.png'),
     ], $this->headers)
         ->assertCreated()
@@ -152,6 +153,7 @@ it('accepts a note when the customer could not upload a receipt', function () {
         'amount'      => 50,
         'method'      => 'jawwal-manual',
         'receiptNote' => 'حوّلت من رقم 0599000000',
+        'senderAccountName' => 'أحمد علي',
     ], $this->headers)->assertCreated();
 });
 
@@ -177,7 +179,7 @@ it('refuses a receipt that is not an image', function () {
 
 it('shows a customer only their own top-up requests', function () {
     test()->postJson('/api/wallet/topup-requests', [
-        'amount' => 50, 'method' => 'bop', 'receiptNote' => 'x',
+        'amount' => 50, 'method' => 'bop', 'receiptNote' => 'x', 'senderAccountName' => 'أحمد علي',
     ], $this->headers)->assertCreated();
 
     $other   = Customer::create(['name' => 'آخر', 'phone' => '0598000000']);
@@ -278,4 +280,26 @@ it('records the balance after every movement', function () {
 
     expect(array_map('floatval', $running))->toBe([100.0, 70.0, 80.0])
         ->and($this->customer->wallet->fresh()->balance)->toBe(80.0);
+});
+
+// ─── who sent the transfer ──────────────────────────────────────────────────
+
+it('requires the sender account name for a transfer top-up', function () {
+    test()->postJson('/api/wallet/topup-requests', [
+        'amount' => 50, 'method' => 'palpay', 'receiptNote' => 'حوّلت',
+    ], $this->headers)
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('senderAccountName');
+});
+
+it('stores and returns the sender account name on a top-up request', function () {
+    test()->postJson('/api/wallet/topup-requests', [
+        'amount' => 50, 'method' => 'bop', 'receiptNote' => 'حوّلت', 'senderAccountName' => 'محمود سالم',
+    ], $this->headers)
+        ->assertCreated()
+        ->assertJsonPath('request.senderAccountName', 'محمود سالم');
+
+    expect(TopUpRequest::sole()->sender_account_name)->toBe('محمود سالم')
+        ->and(test()->getJson('/api/wallet/topup-requests', $this->headers)->json('requests.0.senderAccountName'))
+        ->toBe('محمود سالم');
 });

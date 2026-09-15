@@ -180,7 +180,11 @@
 
 @if (filled($doc->order->notes))
     <hr>
-    <div><span class="bold">ملاحظات:</span> {{ $doc->order->notes }}</div>
+    <div><span class="bold">ملاحظة الطلب:</span> {{ $doc->order->notes }}</div>
+@endif
+
+@if ($doc->order->delivery_method === 'delivery' && filled($doc->order->captain_note))
+    <div><span class="bold">ملاحظة للكابتن:</span> {{ $doc->order->captain_note }}</div>
 @endif
 
 <hr>
