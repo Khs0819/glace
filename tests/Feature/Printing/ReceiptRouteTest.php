@@ -127,5 +127,10 @@ it('tells the cashier screen which receipt started and finished printing', funct
         ->assertOk()
         ->assertSee('var reference = "' . $order->reference . '"', false)
         ->assertSee("tell('printing')", false)
-        ->assertSee("tell('printed')", false);
+        ->assertSee("tell('printed')", false)
+        // Reported once, right after print() returns, with afterprint only as
+        // a backup — so a frame that never delivers the event cannot leave the
+        // cashier's print button disabled.
+        ->assertSee('if (reported) { return; }', false)
+        ->assertSee("window.addEventListener('afterprint', done);", false);
 });

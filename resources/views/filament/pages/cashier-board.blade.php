@@ -1611,9 +1611,14 @@
                 start() {
                     this.refresh();
                     this.loadPanels();
-                    this.timer = setInterval(() => this.refresh(), Math.max(2, this.poll) * 1000);
-                    setInterval(() => this.loadPanels(), 20000);
+
+                    // The live queue: one light request every few seconds. It is
+                    // what keeps the board in step without reloading the page,
+                    // and it pauses while the tab is not being looked at.
+                    this.timer = setInterval(() => { if (!document.hidden) this.refresh(); }, Math.max(2, this.poll) * 1000);
+                    setInterval(() => { if (!document.hidden) this.loadPanels(); }, 20000);
                     setInterval(() => { this.clock = Date.now(); }, 1000);
+
                     document.addEventListener('visibilitychange', () => {
                         if (!document.hidden) { this.refresh(); this.loadPanels(); }
                     });
@@ -1799,15 +1804,31 @@
                     if (!reference) return;
 
                     this.printBusy = true;
-                    const result = await this.printInFrame(reference);
-                    this.printBusy = false;
-                    this.printing[reference] = false;
+                    let result = { outcome: 'failed', duration: 0 };
+
+                    // Whatever happens inside — an error, a frame that never
+                    // answers — the button is released and the next receipt
+                    // gets its turn. A stuck job used to disable every print
+                    // button behind it.
+                    try {
+                        result = await this.printInFrame(reference);
+                    } catch (e) {
+                        console.warn('[print]', reference, 'error', e);
+                    } finally {
+                        this.printBusy = false;
+                        this.printing[reference] = false;
+                    }
 
                     if (result.outcome === 'printed' && result.duration > 2500) {
                         this.previewDetected = true;
                     }
 
-                    this.notifyPrint(reference, result.outcome);
+                    try {
+                        this.notifyPrint(reference, result.outcome);
+                    } catch (e) {
+                        console.warn('[print]', 'notice failed', e);
+                    }
+
                     this.refresh();
                     this.pumpPrintQueue();
                 },
@@ -1815,51 +1836,64 @@
                 /**
                  * Print one receipt and wait for it to finish.
                  *
-                 * Resolves 'printed' once the receipt says the job went to the
-                 * printer, 'failed' when the receipt never rendered (a server
-                 * error, an expired login), and 'timeout' when printing began
-                 * but no confirmation ever came back.
+                 * Resolves 'printed' once the receipt reports the job went to
+                 * the printer, 'failed' when the receipt never started (a server
+                 * error, an expired login), and 'timeout' when it started but
+                 * no confirmation came back within 15 seconds.
                  */
                 printInFrame(reference) {
                     return new Promise(resolve => {
                         const url = config.printUrl + '/' + encodeURIComponent(reference)
                             + '?width=' + this.width + '&auto=1';
+
+                        // Inside the page, one pixel and fully transparent. A frame
+                        // pushed far off-screen can be skipped by the browser.
                         const frame = document.createElement('iframe');
                         frame.setAttribute('aria-hidden', 'true');
-                        frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:420px;height:800px;border:0;';
+                        frame.setAttribute('tabindex', '-1');
+                        frame.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none;border:0;';
 
                         let settled = false;
                         let startedAt = null;
-                        let timer = null;
+                        let noStartTimer = null;
+                        let watchdog = null;
 
                         const finish = (outcome) => {
                             if (settled) return;
                             settled = true;
                             window.removeEventListener('message', onMessage);
-                            clearTimeout(timer);
-                            setTimeout(() => frame.remove(), 1000);
+                            clearTimeout(noStartTimer);
+                            clearTimeout(watchdog);
+                            setTimeout(() => frame.remove(), 2000);
+                            console.info('[print]', reference, outcome);
                             resolve({ outcome: outcome, duration: startedAt ? Date.now() - startedAt : 0 });
                         };
 
                         const onMessage = (event) => {
                             if (event.origin !== window.location.origin) return;
                             if (!event.data || event.data.receipt !== reference) return;
-                            if (event.data.state === 'printing') startedAt = Date.now();
+
+                            if (event.data.state === 'printing') {
+                                startedAt = Date.now();
+                                clearTimeout(noStartTimer);
+                                console.info('[print]', reference, 'printing');
+                                watchdog = setTimeout(() => finish('timeout'), 15000);
+                            }
+
                             if (event.data.state === 'printed') finish('printed');
                         };
 
                         window.addEventListener('message', onMessage);
 
-                        // A receipt that did not render never reports in: catch
-                        // that a few seconds after the frame loads.
+                        // A receipt that did not render never reports in.
                         frame.addEventListener('load', () => {
-                            setTimeout(() => { if (!startedAt) finish('failed'); }, 3000);
+                            noStartTimer = setTimeout(() => { if (!startedAt) finish('failed'); }, 4000);
                         });
 
-                        // Long enough for a person to finish with a print
-                        // dialog, so a slow click is not reported as a failure.
-                        timer = setTimeout(() => finish(startedAt ? 'timeout' : 'failed'), 120000);
+                        // Even a frame that never loads cannot hold the queue.
+                        watchdog = setTimeout(() => finish(startedAt ? 'timeout' : 'failed'), 20000);
 
+                        console.info('[print]', reference, 'queued → ' + url);
                         frame.src = url;
                         document.body.appendChild(frame);
                     });
@@ -2077,8 +2111,10 @@
 
                 async loadPanels() {
                     try {
-                        this.driverData = await this.$wire.driverBalances();
-                        this.pendingRefundsList = await this.$wire.pendingRefunds();
+                        // One round trip for both panels.
+                        const panels = await this.$wire.panels();
+                        this.driverData = panels.drivers;
+                        this.pendingRefundsList = panels.refunds;
                     } catch (e) { /* the next tick retries */ }
                 },
 

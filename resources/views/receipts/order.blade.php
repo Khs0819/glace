@@ -211,19 +211,29 @@
 
         // Wait for layout before printing, or the job can start against a
         // half-drawn page and produce a blank slip.
+        var reported = false;
+
+        function done() {
+            if (reported) { return; }
+            reported = true;
+            tell('printed');
+            if (window.opener) { window.close(); }
+        }
+
         window.addEventListener('load', function () {
             window.setTimeout(function () {
                 tell('printing');
                 window.print();
+
+                // print() only returns once the job has gone to the printer (or
+                // the dialog was closed), so this is the reliable moment to
+                // report. The afterprint event below is kept as a backup, but
+                // it is not always delivered from inside a frame.
+                done();
             }, 250);
         });
 
-        // Fires once the job has been handed to the printer (at once when the
-        // browser prints silently, or when the dialog is closed otherwise).
-        window.addEventListener('afterprint', function () {
-            tell('printed');
-            if (window.opener) { window.close(); }
-        });
+        window.addEventListener('afterprint', done);
     })();
 </script>
 @endif

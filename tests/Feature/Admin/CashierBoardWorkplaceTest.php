@@ -357,3 +357,13 @@ it('reports a print result as a real success or failure notice', function () {
         ->call('sendPrintAlert', '❌ فشلت الطباعة', 'الطلب ORD-TEST01', 'danger')
         ->assertNotified('❌ فشلت الطباعة');
 });
+
+it('returns both side panels in a single call', function () {
+    Driver::create(['name' => 'أحمد سعيد', 'phone' => '0599876543']);
+
+    $panels = Livewire::test(CashierBoard::class)->instance()->panels();
+
+    expect($panels)->toHaveKeys(['drivers', 'refunds'])
+        ->and($panels['drivers'][0]['name'])->toBe('أحمد سعيد')
+        ->and($panels['refunds'])->toBe([]);
+});

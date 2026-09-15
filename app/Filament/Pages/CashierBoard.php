@@ -902,6 +902,20 @@ class CashierBoard extends Page
             ->all();
     }
 
+    /**
+     * Both side panels in one call, so the screen refreshes them with a single
+     * request instead of two.
+     *
+     * @return array{drivers: array<int, array<string, mixed>>, refunds: array<int, array<string, mixed>>}
+     */
+    public function panels(): array
+    {
+        return [
+            'drivers' => $this->driverBalances(),
+            'refunds' => $this->pendingRefunds(),
+        ];
+    }
+
     // ─── windows opened from the board with $wire.mountAction() ─────────────
     //
     // Filament actions rather than hand-built modals, because these take a file:
