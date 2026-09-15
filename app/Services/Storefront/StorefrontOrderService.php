@@ -170,10 +170,15 @@ class StorefrontOrderService
                 $this->payFromWallet($order, $customer, $total);
             }
 
+            // Only when the shop wants receipts to print on their own; by default
+            // the cashier prints each one from the screen.
+            //
             // After the commit, never inside it: a queued job that ran before
             // the transaction landed would look for an order that is not there
             // yet, and a printer error must never roll back a paid order.
-            DB::afterCommit(fn () => PrintOrderReceipt::dispatch($order->getKey()));
+            if (config('storefront.cashier.auto_print')) {
+                DB::afterCommit(fn () => PrintOrderReceipt::dispatch($order->getKey()));
+            }
 
             return $order->load('items');
         });

@@ -349,3 +349,11 @@ it('shows the sales and the order archive on the shift page', function () {
         ->assertSee('أرشيف طلبات الوردية')
         ->assertSee($order->reference);
 });
+
+// ─── printing ───────────────────────────────────────────────────────────────
+
+it('reports a print result as a real success or failure notice', function () {
+    Livewire::test(CashierBoard::class)
+        ->call('sendPrintAlert', '❌ فشلت الطباعة', 'الطلب ORD-TEST01', 'danger')
+        ->assertNotified('❌ فشلت الطباعة');
+});

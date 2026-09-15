@@ -198,23 +198,33 @@
 
 @if ($autoPrint)
 <script>
-    // Wait for layout before printing, or the dialog can open against a
-    // half-drawn page and produce a blank slip.
-    window.addEventListener('load', function () {
-        window.setTimeout(function () {
-            window.print();
-        }, 250);
-    });
+    (function () {
+        var reference = "{{ $doc->order->reference }}";
 
-    // Opened by the cashier screen, either in a background window or in a
-    // hidden frame. Close the window once the dialog is done so dockets do not
-    // pile up as tabs; a frame is removed by the screen itself.
-    window.addEventListener('afterprint', function () {
-        if (window.opener) { window.close(); }
-        if (window.parent && window.parent !== window) {
-            window.parent.postMessage({ receiptPrinted: true }, window.location.origin);
+        // The cashier screen prints one receipt at a time and reports each
+        // result, so the slip says which order it is and where it has got to.
+        function tell(state) {
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({ receipt: reference, state: state }, window.location.origin);
+            }
         }
-    });
+
+        // Wait for layout before printing, or the job can start against a
+        // half-drawn page and produce a blank slip.
+        window.addEventListener('load', function () {
+            window.setTimeout(function () {
+                tell('printing');
+                window.print();
+            }, 250);
+        });
+
+        // Fires once the job has been handed to the printer (at once when the
+        // browser prints silently, or when the dialog is closed otherwise).
+        window.addEventListener('afterprint', function () {
+            tell('printed');
+            if (window.opener) { window.close(); }
+        });
+    })();
 </script>
 @endif
 

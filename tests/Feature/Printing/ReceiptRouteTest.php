@@ -116,3 +116,16 @@ it('draws narrower than the paper and off the clipped right edge', function () {
     $this->get(route('receipts.show', $order->reference) . '?width=58')
         ->assertSee('width: 44mm', false);
 });
+
+it('tells the cashier screen which receipt started and finished printing', function () {
+    $this->actingAs(User::factory()->create());
+    $order = routeOrder();
+
+    // The screen prints one receipt at a time and reports each result, so the
+    // slip names its order and reports both moments.
+    $this->get(route('receipts.show', $order->reference) . '?auto=1')
+        ->assertOk()
+        ->assertSee('var reference = "' . $order->reference . '"', false)
+        ->assertSee("tell('printing')", false)
+        ->assertSee("tell('printed')", false);
+});

@@ -637,11 +637,13 @@ class CashierBoard extends Page
     /** Alert the cashier about the print result. */
     public function sendPrintAlert(string $title, string $body, string $type): void
     {
+        // A status, not just a colour: it is what gives the notice its icon, and
+        // a failed print must look like a failure at a glance.
         Notification::make()
             ->title($title)
             ->body($body)
-            ->color($type)
-            ->duration(5000)
+            ->status(in_array($type, ['success', 'warning', 'danger', 'info'], true) ? $type : 'info')
+            ->duration(6000)
             ->send();
     }
 

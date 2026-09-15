@@ -630,7 +630,17 @@ it('offers nothing once an order is closed', function () {
 
 // ─── the counter ────────────────────────────────────────────────────────────
 
-it('queues a receipt the moment an order lands', function () {
+it('leaves printing to the cashier when an order lands', function () {
+    Illuminate\Support\Facades\Queue::fake();
+
+    test()->post('/api/orders', storefrontPayload(), $this->headers)->assertCreated();
+
+    // The shop prints by hand: nothing goes to a printer on its own.
+    Illuminate\Support\Facades\Queue::assertNotPushed(App\Jobs\PrintOrderReceipt::class);
+});
+
+it('queues a receipt the moment an order lands when automatic printing is on', function () {
+    config(['storefront.cashier.auto_print' => true]);
     Illuminate\Support\Facades\Queue::fake();
 
     test()->post('/api/orders', storefrontPayload(), $this->headers)->assertCreated();

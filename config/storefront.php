@@ -134,7 +134,9 @@ return [
         // while the customer is still standing there.
         'poll_seconds'   => (int) env('GLACE_CASHIER_POLL', 3),
         'lookback_hours' => (int) env('GLACE_CASHIER_LOOKBACK', 12),
-        'auto_print'     => (bool) env('GLACE_CASHIER_AUTOPRINT', true),
+        // Off: the cashier prints each receipt by pressing its button. On, a
+        // receipt is sent to the network printer as soon as an order lands.
+        'auto_print'     => (bool) env('GLACE_CASHIER_AUTOPRINT', false),
     ],
 
 ];

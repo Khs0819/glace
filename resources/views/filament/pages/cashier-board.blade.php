@@ -543,7 +543,6 @@
     <div
         x-data="cashierBoard({
             poll:      {{ $settings['poll'] }},
-            autoPrint: {{ $settings['autoPrint'] ? 'true' : 'false' }},
             width:     {{ $settings['width'] }},
             queueUrl:  @js(route('receipts.queue')),
             printUrl:  @js(url('admin/receipts')),
@@ -564,6 +563,24 @@
                     <div class="text-sm text-rose-600 dark:text-rose-400" x-text="connection.error"></div>
                 </div>
                 <button class="modal-btn-confirm" style="background:#e11d48" @click="window.location.reload()">إعادة تحميل الصفحة</button>
+            </div>
+        </template>
+
+        {{-- ─── print dialog still showing ────────────────────────────────────
+             A web page cannot print without the browser's dialog unless the
+             browser itself was started for silent printing. When a print took
+             long enough that a person must have clicked through the dialog,
+             say so, and say how to switch it off. --}}
+        <template x-if="previewDetected && !previewDismissed">
+            <div class="mb-3 rounded-xl border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 flex items-start justify-between gap-3">
+                <div class="text-sm">
+                    <div class="font-bold text-amber-800 dark:text-amber-300">🖨️ ما زالت نافذة معاينة الطباعة تظهر</div>
+                    <div class="text-amber-700 dark:text-amber-400 mt-1">
+                        للطباعة المباشرة بدون معاينة، افتح شاشة الكاشير من اختصار المتصفح المُعدّ للطباعة الصامتة
+                        (<span dir="ltr">--kiosk-printing</span>) — الخطوات في دليل «طباعة الكاشير».
+                    </div>
+                </div>
+                <button class="text-amber-700 text-xl leading-none" @click="previewDismissed = true">&times;</button>
             </div>
         </template>
 
@@ -735,10 +752,6 @@
                         <option value="total_desc">💰 الأعلى مبلغاً</option>
                         <option value="total_asc">💰 الأقل مبلغاً</option>
                     </select>
-                    <label class="flex items-center gap-1.5 text-xs cursor-pointer select-none">
-                        <input type="checkbox" x-model="autoPrint" class="rounded w-3.5 h-3.5">
-                        <span>طباعة تلقائية</span>
-                    </label>
                 </div>
             </div>
         </div>
@@ -1526,6 +1539,19 @@
                 knownRefs: null,
                 freshRefs: {},
 
+                // Receipts print one at a time: a browser runs a single print
+                // job, and any other request made while one is running is
+                // dropped without a word — which is why a second receipt did
+                // not come out.
+                printQueue: [],
+                printBusy: false,
+
+                // Set when a print took long enough that somebody must have
+                // clicked through a print dialog, so the screen can explain
+                // how to turn the dialog off.
+                previewDetected: false,
+                previewDismissed: false,
+
                 // Refund methods for the modal
                 refundMethods: [
                     { value: 'jawwal', label: 'جوال بي', icon: '📱' },
@@ -1577,7 +1603,6 @@
                 ],
 
                 poll: config.poll,
-                autoPrint: config.autoPrint,
                 width: config.width,
                 networkPrinter: config.networkPrinter,
                 printed: new Set(),
@@ -1634,7 +1659,6 @@
                         this.announceNew(data.orders || []);
                         this.orders = data.orders || [];
                         this.connection = { ok: true, error: null, lastOk: Date.now() };
-                        if (this.autoPrint) this.printNew();
                     } catch (e) {
                         this.connection = { ok: false, lastOk: this.connection.lastOk, error: 'انقطع الاتصال بالخادم — تُعاد المحاولة تلقائياً.' };
                     } finally {
@@ -1758,42 +1782,136 @@
 
                 // ─── printing ───────────────────────────────────────────────
 
-                printNew() {
-                    this.orders
-                        .filter(o => !o.printed && !o.final && !this.printed.has(o.reference))
-                        .forEach(o => this.print(o, true));
-                },
-
-                // Printed from a hidden frame on this page, not a new window. A
-                // browser blocks windows that are not opened straight from a
-                // click — which is why printing from this screen did nothing
-                // while the orders page, a plain link, worked.
+                // Queue a receipt. Printed from a hidden frame on this page —
+                // never a new window, which a browser blocks when it is not
+                // opened straight from a click.
                 print(order, auto) {
                     this.printed.add(order.reference);
-                    const url = config.printUrl + '/' + encodeURIComponent(order.reference)
-                        + '?width=' + this.width + '&auto=1';
-                    const frame = document.createElement('iframe');
-                    frame.setAttribute('aria-hidden', 'true');
-                    frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:420px;height:800px;border:0;';
-                    frame.src = url;
-                    document.body.appendChild(frame);
-                    setTimeout(() => frame.remove(), 120000);
+                    this.printing[order.reference] = true;
+                    this.printQueue.push(order.reference);
+                    this.pumpPrintQueue();
+                },
+
+                async pumpPrintQueue() {
+                    if (this.printBusy) return;
+
+                    const reference = this.printQueue.shift();
+                    if (!reference) return;
+
+                    this.printBusy = true;
+                    const result = await this.printInFrame(reference);
+                    this.printBusy = false;
+                    this.printing[reference] = false;
+
+                    if (result.outcome === 'printed' && result.duration > 2500) {
+                        this.previewDetected = true;
+                    }
+
+                    this.notifyPrint(reference, result.outcome);
+                    this.refresh();
+                    this.pumpPrintQueue();
+                },
+
+                /**
+                 * Print one receipt and wait for it to finish.
+                 *
+                 * Resolves 'printed' once the receipt says the job went to the
+                 * printer, 'failed' when the receipt never rendered (a server
+                 * error, an expired login), and 'timeout' when printing began
+                 * but no confirmation ever came back.
+                 */
+                printInFrame(reference) {
+                    return new Promise(resolve => {
+                        const url = config.printUrl + '/' + encodeURIComponent(reference)
+                            + '?width=' + this.width + '&auto=1';
+                        const frame = document.createElement('iframe');
+                        frame.setAttribute('aria-hidden', 'true');
+                        frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:420px;height:800px;border:0;';
+
+                        let settled = false;
+                        let startedAt = null;
+                        let timer = null;
+
+                        const finish = (outcome) => {
+                            if (settled) return;
+                            settled = true;
+                            window.removeEventListener('message', onMessage);
+                            clearTimeout(timer);
+                            setTimeout(() => frame.remove(), 1000);
+                            resolve({ outcome: outcome, duration: startedAt ? Date.now() - startedAt : 0 });
+                        };
+
+                        const onMessage = (event) => {
+                            if (event.origin !== window.location.origin) return;
+                            if (!event.data || event.data.receipt !== reference) return;
+                            if (event.data.state === 'printing') startedAt = Date.now();
+                            if (event.data.state === 'printed') finish('printed');
+                        };
+
+                        window.addEventListener('message', onMessage);
+
+                        // A receipt that did not render never reports in: catch
+                        // that a few seconds after the frame loads.
+                        frame.addEventListener('load', () => {
+                            setTimeout(() => { if (!startedAt) finish('failed'); }, 3000);
+                        });
+
+                        // Long enough for a person to finish with a print
+                        // dialog, so a slow click is not reported as a failure.
+                        timer = setTimeout(() => finish(startedAt ? 'timeout' : 'failed'), 120000);
+
+                        frame.src = url;
+                        document.body.appendChild(frame);
+                    });
+                },
+
+                notifyPrint(reference, outcome) {
+                    const notices = {
+                        printed: ['✅ تمت الطباعة', 'أُرسلت فاتورة الطلب ' + reference + ' إلى الطابعة', 'success'],
+                        failed:  ['❌ فشلت الطباعة', 'تعذّر تجهيز فاتورة الطلب ' + reference + ' — أعد المحاولة', 'danger'],
+                        timeout: ['⚠️ لم تُؤكَّد الطباعة', 'لم يصل تأكيد طباعة الطلب ' + reference + ' — تحقق من الطابعة', 'warning'],
+                    };
+                    const [title, body, status] = notices[outcome] || notices.failed;
+                    this.alert(title, body, status);
+                },
+
+                // Shown straight from the page, so a notice appears at once even
+                // while another request to the server is still running.
+                alert(title, body, status) {
+                    if (window.FilamentNotification) {
+                        const notice = new window.FilamentNotification().title(title).body(body);
+                        if (status === 'success') notice.success();
+                        else if (status === 'warning') notice.warning();
+                        else notice.danger();
+                        notice.send();
+                        return;
+                    }
+                    this.$wire.sendPrintAlert(title, body, status);
                 },
 
                 async printOrder(order) {
                     if (!this.networkPrinter) {
                         this.print(order, false);
-                        setTimeout(() => this.refresh(), 1500);
                         return;
                     }
+
                     this.printing[order.reference] = true;
                     try {
                         const result = await this.$wire.printDirect(order.reference);
-                        if (!result.success) this.print(order, false);
+                        if (result.success) {
+                            this.printed.add(order.reference);
+                            this.alert('✅ تمت الطباعة', 'أُرسلت فاتورة الطلب ' + order.reference + ' إلى الطابعة الشبكية', 'success');
+                        } else {
+                            this.alert('⚠️ الطابعة الشبكية لم تستجب', (result.error ? result.error + ' — ' : '') + 'تتم الطباعة من المتصفح', 'warning');
+                            this.print(order, false);
+                        }
                     } catch (e) {
+                        this.alert('⚠️ الطابعة الشبكية لم تستجب', 'تتم الطباعة من المتصفح', 'warning');
                         this.print(order, false);
                     } finally {
-                        this.printing[order.reference] = false;
+                        if (this.printQueue.indexOf(order.reference) === -1 && !this.printBusy) {
+                            this.printing[order.reference] = false;
+                        }
                         this.refresh();
                     }
                 },
