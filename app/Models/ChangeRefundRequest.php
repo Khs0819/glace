@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\MediaUrl;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -29,7 +30,7 @@ class ChangeRefundRequest extends Model
     protected $fillable = [
         'order_id', 'order_reference', 'amount',
         'holder_name', 'holder_phone', 'refund_method',
-        'notes', 'status', 'created_by', 'reviewed_by', 'reviewed_at',
+        'notes', 'transfer_receipt', 'status', 'created_by', 'reviewed_by', 'reviewed_at',
     ];
 
     protected $casts = [
@@ -55,6 +56,12 @@ class ChangeRefundRequest extends Model
     public function isPending(): bool
     {
         return $this->status === self::STATUS_PENDING;
+    }
+
+    /** The slip showing the change was sent back, once it has been. */
+    public function transferReceiptUrl(): ?string
+    {
+        return MediaUrl::resolve($this->transfer_receipt);
     }
 
     public function methodLabel(): string

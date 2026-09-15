@@ -71,10 +71,12 @@ class Order extends Model
      * only these, so a pickup order can never be pushed to "في الطريق" and
      * leave the storefront's tracker with a step it cannot draw.
      */
+    // Every channel is prepared and made ready at the counter; a delivery then
+    // goes out on the road, and only once a driver has been chosen.
     public const FULFILMENT_FLOWS = [
-        'dine-in'  => [self::FULFILMENT_REVIEW, self::FULFILMENT_DELIVERED],
+        'dine-in'  => [self::FULFILMENT_REVIEW, self::FULFILMENT_PREPARING, self::FULFILMENT_READY, self::FULFILMENT_DELIVERED],
         'pickup'   => [self::FULFILMENT_REVIEW, self::FULFILMENT_PREPARING, self::FULFILMENT_READY, self::FULFILMENT_DELIVERED],
-        'delivery' => [self::FULFILMENT_REVIEW, self::FULFILMENT_PREPARING, self::FULFILMENT_ON_WAY, self::FULFILMENT_RECEIVED],
+        'delivery' => [self::FULFILMENT_REVIEW, self::FULFILMENT_PREPARING, self::FULFILMENT_READY, self::FULFILMENT_ON_WAY, self::FULFILMENT_RECEIVED],
     ];
 
     public const DELIVERY_METHODS = ['delivery', 'pickup', 'dine-in'];
@@ -347,5 +349,34 @@ class Order extends Model
     public function refundable(): bool
     {
         return $this->total > 0 && ! $this->isRefunded();
+    }
+
+    public function changeRefundRequests(): HasMany
+    {
+        return $this->hasMany(ChangeRefundRequest::class);
+    }
+
+    /**
+     * Change from a cash over-payment that has not been returned any way yet.
+     *
+     * Received minus total, less whatever already went to the wallet and less
+     * every refund request that was not rejected. Computed rather than typed at
+     * the counter, so the same change cannot be handed back twice — once to the
+     * wallet and again as a transfer, or twice as a transfer.
+     */
+    public function refundableChange(): float
+    {
+        if ($this->tendered_amount === null) {
+            return 0.0;
+        }
+
+        $requested = (float) $this->changeRefundRequests()
+            ->where('status', '!=', ChangeRefundRequest::STATUS_REJECTED)
+            ->sum('amount');
+
+        return max(0.0, round(
+            $this->tendered_amount - $this->total - (float) $this->change_credited - $requested,
+            2,
+        ));
     }
 }

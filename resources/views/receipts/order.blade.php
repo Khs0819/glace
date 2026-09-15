@@ -27,19 +27,24 @@
     }
 
     /*
-     * The printable width, not the paper width.
+     * Narrower than the printable width, and held off the right edge.
      *
-     * A thermal head does not reach the edges of its roll: 80 mm paper prints
-     * 72 mm, 58 mm paper prints 48 mm. Drawing the page at the full paper width
-     * puts the outer millimetres outside the head, and in a right-to-left
-     * layout that is exactly where the order number, date and phone sit — so
-     * they came out cut off. Centred, so the driver's own offset does not
-     * matter.
+     * A thermal head does not reach the edges of its roll, and the printer
+     * driver adds its own margin on top — wider on the right than the
+     * datasheet admits. In an Arabic slip the right edge is where every line
+     * starts: the quantity, the first letters of each item. Centring the page
+     * still lost them, so the content is drawn narrower and pushed left by a
+     * set margin. Both numbers are settings (GLACE_RECEIPT_*), so a different
+     * printer is tuned without touching this file.
      */
+    @php
+        $contentWidth = (float) config($width >= 80 ? 'storefront.printer.receipt_width_80' : 'storefront.printer.receipt_width_58', $width >= 80 ? 66 : 44);
+        $rightMargin  = (float) config('storefront.printer.receipt_right_margin', 5);
+    @endphp
     body {
-        width: {{ $width >= 80 ? 72 : 48 }}mm;
-        margin: 0 auto;
-        padding: 1mm 1mm 0;
+        width: {{ $contentWidth }}mm;
+        margin: 0 {{ $rightMargin }}mm 0 auto;
+        padding: 1mm 0 0;
         /* A monospace stack keeps the two-column rows aligned; the Arabic
            faces are named first so they win for Arabic glyphs. */
         font-family: "Tahoma", "Arial", "Segoe UI", monospace;
@@ -201,10 +206,14 @@
         }, 250);
     });
 
-    // Opened by the cashier screen in a background window: close it once the
-    // dialog is done so dockets do not pile up as open tabs.
+    // Opened by the cashier screen, either in a background window or in a
+    // hidden frame. Close the window once the dialog is done so dockets do not
+    // pile up as tabs; a frame is removed by the screen itself.
     window.addEventListener('afterprint', function () {
         if (window.opener) { window.close(); }
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ receiptPrinted: true }, window.location.origin);
+        }
     });
 </script>
 @endif

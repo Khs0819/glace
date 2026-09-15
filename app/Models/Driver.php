@@ -25,6 +25,34 @@ class Driver extends Model
         return $this->hasMany(Order::class);
     }
 
+    public function settlements(): HasMany
+    {
+        return $this->hasMany(DriverSettlement::class);
+    }
+
+    public function payouts(): HasMany
+    {
+        return $this->hasMany(DriverPayout::class);
+    }
+
+    /** Delivery fees earned that have not been transferred to the driver yet. */
+    public function unpaidSettlements(): HasMany
+    {
+        return $this->settlements()->whereNull('payout_id');
+    }
+
+    /**
+     * What the shop owes this driver right now, in shekels.
+     *
+     * The sum of delivery fees on orders they were given and have not been paid
+     * for. A payout clears exactly those rows, so the balance goes back to zero
+     * by itself — there is no separate figure to keep in step.
+     */
+    public function balance(): float
+    {
+        return round((float) $this->unpaidSettlements()->sum('delivery_fee'), 2);
+    }
+
     /** Deliveries of theirs that are still on the road. */
     public function activeOrders(): HasMany
     {

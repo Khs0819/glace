@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\CashierShift;
+use App\Models\ChangeRefundRequest;
 use App\Models\Order;
 use App\Services\Printing\ReceiptPrinter;
 use Illuminate\Contracts\View\View;
@@ -48,34 +50,68 @@ class ReceiptController extends Controller
     }
 
     /**
-     * Orders the counter still has to deal with.
+     * The open shift's orders, for the cashier screen.
      *
-     * Polled by the cashier screen. Deliberately small and cheap: only what is
-     * needed to draw a card and decide whether to print it.
+     * Polled every few seconds, so it carries everything a card and the shift
+     * strip need in one round trip — the screen never has to ask twice.
      */
     public function queue(Request $request): JsonResponse
     {
-        $since = now()->subHours((int) config('storefront.cashier.lookback_hours', 12));
+        $base = [
+            'autoPrint'      => (bool) config('storefront.cashier.auto_print', true),
+            'pollSeconds'    => (int) config('storefront.cashier.poll_seconds', 3),
+            'networkPrinter' => $this->printer->networkAvailable(),
+            'serverTime'     => now()->toIso8601String(),
+        ];
+
+        $shift = CashierShift::openFor($request->user());
 
         /*
-         * Closed orders are included, not filtered out.
+         * The board belongs to the shift.
+         *
+         * Closing a shift sends its cards to the archive (the shift's own page),
+         * and a new shift starts from an empty board. With no shift open there
+         * is nothing to show — but orders keep arriving from the storefront, so
+         * how many are waiting is reported, and the screen can say so instead of
+         * looking quiet while customers wait.
+         */
+        if (! $shift) {
+            return response()->json($base + [
+                'shiftOpen' => false,
+                'waiting'   => Order::whereNotIn('status', Order::FINAL_STATUSES)
+                    ->where('created_at', '>=', now()->subHours((int) config('storefront.cashier.lookback_hours', 12)))
+                    ->count(),
+                'summary'   => null,
+                'orders'    => [],
+            ]);
+        }
+
+        /*
+         * Closed orders of this shift are included, not filtered out.
          *
          * The counter needs to look one up as often as it needs to work on
          * one — "did that delivery go out?", a reprint, a customer back at the
          * till. They arrive already printed, so auto-print skips them on its
          * own and no docket comes out twice.
          */
-        $orders = Order::with(['items', 'paymentAccount'])
-            ->where('created_at', '>=', $since)
+        $orders = Order::with(['items', 'paymentAccount', 'changeRefundRequests'])
+            ->where('created_at', '>=', $shift->opened_at)
             ->latest('created_at')
-            ->limit(120)
+            ->limit(300)
             ->get();
 
-        return response()->json([
-            'autoPrint'       => (bool) config('storefront.cashier.auto_print', true),
-            'pollSeconds'     => (int) config('storefront.cashier.poll_seconds', 10),
-            'networkPrinter'  => $this->printer->networkAvailable(),
-            'orders'          => $orders->map(fn (Order $order) => [
+        $summary = $shift->salesSummary();
+
+        return response()->json($base + [
+            'shiftOpen' => true,
+            'summary'   => [
+                'openedAt'     => $shift->opened_at?->format('H:i'),
+                'orders'       => $summary['orders'],
+                'gross'        => $summary['gross'],
+                'net'          => $summary['net'],
+                'expectedCash' => $summary['expectedCash'],
+            ],
+            'orders'    => $orders->map(fn (Order $order) => [
                 'reference'      => $order->reference,
                 'status'         => $order->status,
                 'paymentStatus'  => $order->payment_status,
@@ -102,6 +138,28 @@ class ReceiptController extends Controller
                 ] : null,
                 'needsDriver'    => $order->delivery_method === 'delivery' && $order->driver_id === null,
                 'final'          => $order->isFinal(),
+
+                // Shown on the card only when present: a customer's note can be
+                // the one thing the counter must not miss.
+                'notes'          => filled($order->notes) ? $order->notes : null,
+                'deliveryFee'    => (float) $order->delivery_fee,
+
+                // Proof of a transfer, and whether it still needs confirming.
+                'requiresReceipt' => $order->requiresReceipt(),
+                'hasReceipt'      => filled($order->receipt_image) || filled($order->receipt_note),
+
+                // Cash: what was declared or taken, and the change still owed.
+                // The owed figure is computed here so the counter can never be
+                // offered a refund of change that already went back.
+                'tenderedAmount'   => $order->tendered_amount,
+                'changeCredited'   => (float) $order->change_credited,
+                'refundableChange' => $order->tendered_amount === null ? 0.0 : max(0.0, round(
+                    $order->tendered_amount - $order->total - (float) $order->change_credited
+                    - (float) $order->changeRefundRequests
+                        ->where('status', '!=', ChangeRefundRequest::STATUS_REJECTED)
+                        ->sum('amount'),
+                    2,
+                )),
                 'createdAt'      => $order->created_at?->toIso8601String(),
                 // The screen prints exactly those the printer did not get.
                 'printed'        => $order->printed(),

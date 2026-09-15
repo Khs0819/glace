@@ -74,7 +74,8 @@ it('marks a reprint as a duplicate on the paper', function () {
 });
 
 it('lists orders for the cashier screen, finished ones included', function () {
-    $this->actingAs(User::factory()->create());
+    $this->actingAs($user = User::factory()->create());
+    App\Models\CashierShift::create(['user_id' => $user->id, 'opened_at' => now()->subHour(), 'opening_float' => 0]);
     routeOrder();
     routeOrder(['reference' => 'ORD-DONE01', 'status' => Order::FULFILMENT_RECEIVED]);
 
@@ -102,15 +103,16 @@ it('serves the receipt at both paper widths', function () {
     }
 });
 
-it('draws within the printable width, not the paper width', function () {
-    // 80 mm paper prints 72 mm and 58 mm prints 48 mm. Drawing at the paper
-    // width pushed the order number, date and phone off the head.
+it('draws narrower than the paper and off the clipped right edge', function () {
+    // Drawing at the paper width — and even at the printable width — lost the
+    // quantities at the start of each Arabic line to the driver's right margin.
     $this->actingAs(User::factory()->create());
     $order = routeOrder();
 
     $this->get(route('receipts.show', $order->reference) . '?width=80')
-        ->assertSee('width: 72mm', false);
+        ->assertSee('width: 66mm', false)
+        ->assertSee('margin: 0 5mm 0 auto', false);
 
     $this->get(route('receipts.show', $order->reference) . '?width=58')
-        ->assertSee('width: 48mm', false);
+        ->assertSee('width: 44mm', false);
 });

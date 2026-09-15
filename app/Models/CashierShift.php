@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Services\Checkout\Money;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -24,7 +26,7 @@ class CashierShift extends Model
 {
     protected $fillable = [
         'user_id', 'opened_at', 'closed_at', 'opening_float',
-        'expected_cash', 'counted_cash', 'difference', 'totals', 'notes', 'closed_by',
+        'expected_cash', 'counted_cash', 'difference', 'totals', 'summary', 'notes', 'closed_by',
     ];
 
     protected $casts = [
@@ -35,6 +37,7 @@ class CashierShift extends Model
         'counted_cash'  => 'float',
         'difference'    => 'float',
         'totals'        => 'array',
+        'summary'       => 'array',
     ];
 
     public function user(): BelongsTo
@@ -101,8 +104,16 @@ class CashierShift extends Model
             ->where('payment_status', Order::STATUS_PAID)
             ->where('payment_method', 'cash');
 
-        $cash   = (clone $paidCash)->sum('total');
-        $change = (clone $paidCash)->sum('change_credited');
+        // What was physically handed over: the note, when one was recorded,
+        // otherwise the total. Any change was returned to the wallet or as a
+        // transfer later — never out of this drawer — so all of it stays here.
+        $cash = (clone $paidCash)->sum(DB::raw('COALESCE(tendered_amount, total)'));
+
+        // Change handed back in notes is the one exception: it did leave.
+        $cashChange = ChangeRefundRequest::whereIn('order_id', (clone $paidCash)->select('id'))
+            ->where('refund_method', 'cash')
+            ->where('status', ChangeRefundRequest::STATUS_COMPLETED)
+            ->sum('amount');
 
         /*
          * Only refunds actually handed back in notes reduce the drawer.
@@ -124,7 +135,58 @@ class CashierShift extends Model
 
         return Money::toAgorot($this->opening_float)
             + Money::toAgorot($cash)
-            + Money::toAgorot($change)
+            - Money::toAgorot($cashChange)
             - Money::toAgorot($refunded);
+    }
+
+    /**
+     * Orders placed while this shift was open. The shift's archive.
+     *
+     * By creation time, not by `shift_id`: `shift_id` marks who took the cash,
+     * and an order paid by transfer or wallet never gets one — but it was still
+     * this shift's order to deal with.
+     */
+    public function windowOrders(): Builder
+    {
+        return Order::query()
+            ->where('created_at', '>=', $this->opened_at)
+            ->when($this->closed_at, fn (Builder $query) => $query->where('created_at', '<=', $this->closed_at));
+    }
+
+    /**
+     * The sales figures for closing, in shekels.
+     *
+     * Sales are counted by when the money settled (`paid_at`) inside the shift,
+     * across every method — cash, card, transfer, wallet — so net sales is the
+     * shift's takings rather than just the drawer. Net is gross less refunds.
+     *
+     * @return array<string, float|int>
+     */
+    public function salesSummary(): array
+    {
+        $end  = $this->closed_at ?? now();
+        $paid = Order::query()
+            ->where('payment_status', Order::STATUS_PAID)
+            ->whereBetween('paid_at', [$this->opened_at, $end]);
+
+        $gross   = (float) (clone $paid)->sum('total');
+        $refunds = (float) (clone $paid)->sum('refunded_amount');
+
+        $changeRequests = ChangeRefundRequest::whereIn('order_id', $this->windowOrders()->select('id'))
+            ->where('status', '!=', ChangeRefundRequest::STATUS_REJECTED);
+
+        return [
+            'orders'          => $this->windowOrders()->count(),
+            'paidOrders'      => (clone $paid)->count(),
+            'gross'           => round($gross, 2),
+            'discounts'       => round((float) (clone $paid)->sum('discount'), 2),
+            'deliveryFees'    => round((float) (clone $paid)->sum('delivery_fee'), 2),
+            'refunds'         => round($refunds, 2),
+            'net'             => round($gross - $refunds, 2),
+            'changeToWallet'  => round((float) (clone $paid)->sum('change_credited'), 2),
+            'changeRefunds'   => round((float) (clone $changeRequests)->sum('amount'), 2),
+            'changePending'   => round((float) (clone $changeRequests)->where('status', ChangeRefundRequest::STATUS_PENDING)->sum('amount'), 2),
+            'expectedCash'    => Money::toDecimal($this->expectedCashAgorot()),
+        ];
     }
 }

@@ -242,6 +242,8 @@ class FinancialReport
                 'expected'   => $shift->expected_cash,
                 'counted'    => $shift->counted_cash,
                 'difference' => $shift->difference,
+                // Frozen at close; live for a shift still open.
+                'netSales'   => ($shift->summary ?? $shift->salesSummary())['net'] ?? null,
                 'orders'     => $shift->orders()->count(),
             ])
             ->all();

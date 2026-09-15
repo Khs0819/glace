@@ -102,6 +102,16 @@ return [
         // somewhere else entirely. Run `php artisan printer:codepages` and read
         // the number off the paper.
         'codepage_table' => env('GLACE_PRINTER_CODEPAGE_TABLE'),
+
+        // The browser receipt. Printer drivers keep their own unprintable
+        // margin, and on some the right edge is wider than the datasheet says:
+        // anything drawn there — the quantity at the start of an Arabic line —
+        // is lost. So the content is drawn narrower and pushed off the right
+        // edge. If digits still clip, raise the margin; if the left clips,
+        // lower the width.
+        'receipt_width_80'     => (float) env('GLACE_RECEIPT_WIDTH_80', 66),
+        'receipt_width_58'     => (float) env('GLACE_RECEIPT_WIDTH_58', 44),
+        'receipt_right_margin' => (float) env('GLACE_RECEIPT_RIGHT_MARGIN', 5),
         'width'       => (int) env('GLACE_PRINTER_WIDTH', 48),
         'cut'         => (bool) env('GLACE_PRINTER_CUT', true),
         'open_drawer' => (bool) env('GLACE_PRINTER_DRAWER', false),
@@ -119,7 +129,10 @@ return [
     */
 
     'cashier' => [
-        'poll_seconds'   => (int) env('GLACE_CASHIER_POLL', 10),
+        // Seconds between refreshes of the cashier screen. Short on purpose:
+        // the screen is the counter's live queue, and a new order must appear
+        // while the customer is still standing there.
+        'poll_seconds'   => (int) env('GLACE_CASHIER_POLL', 3),
         'lookback_hours' => (int) env('GLACE_CASHIER_LOOKBACK', 12),
         'auto_print'     => (bool) env('GLACE_CASHIER_AUTOPRINT', true),
     ],

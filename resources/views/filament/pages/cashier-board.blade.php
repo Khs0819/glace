@@ -539,51 +539,6 @@
         </div>
     </div>
 
-    {{-- ─── shift strip ──────────────────────────────────────────────────── --}}
-    @if ($shift)
-        <div class="shift-strip mb-3">
-            <div class="flex items-center justify-between flex-wrap gap-3">
-                <div class="flex items-center gap-6">
-                    <div class="flex items-center gap-2">
-                        <span class="text-lg">🕐</span>
-                        <div>
-                            <div class="text-xs text-gray-500 dark:text-gray-400">الوردية مفتوحة منذ</div>
-                            <div class="text-sm font-bold">{{ $summary['opened'] ?? '—' }}</div>
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <span class="text-lg">📦</span>
-                        <div>
-                            <div class="text-xs text-gray-500 dark:text-gray-400">طلبات الوردية</div>
-                            <div class="text-sm font-bold">{{ $summary['orders'] ?? 0 }}</div>
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <span class="text-lg">💰</span>
-                        <div>
-                            <div class="text-xs text-gray-500 dark:text-gray-400">النقد المتوقع</div>
-                            <div class="text-sm font-bold">{{ number_format($summary['expected'] ?? 0, 2) }} ₪</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="flex items-center gap-2 text-sm">
-                    <span class="text-lg">🖨️</span>
-                    <span class="font-semibold">{{ $this->networkPrinter() ? 'شبكية + متصفح' : 'المتصفح فقط' }}</span>
-                </div>
-            </div>
-        </div>
-    @else
-        <div class="shift-strip mb-3">
-            <div class="flex items-center gap-3 justify-center py-2">
-                <span class="text-2xl">🔒</span>
-                <div class="text-center">
-                    <div class="font-bold">لا توجد وردية مفتوحة</div>
-                    <div class="text-xs text-gray-500">افتح وردية قبل استلام أي مبلغ نقدي، وإلا لن يظهر في تقرير الإغلاق.</div>
-                </div>
-            </div>
-        </div>
-    @endif
-
     {{-- ─── live queue ────────────────────────────────────────────────────── --}}
     <div
         x-data="cashierBoard({
@@ -592,10 +547,81 @@
             width:     {{ $settings['width'] }},
             queueUrl:  @js(route('receipts.queue')),
             printUrl:  @js(url('admin/receipts')),
+            networkPrinter: {{ ($settings['networkPrinter'] ?? false) ? 'true' : 'false' }},
         })"
         x-init="start()"
+        @cashier-refresh.window="onServerRefresh()"
         wire:ignore
     >
+        {{-- ─── connection warning ────────────────────────────────────────────
+             A poll that fails quietly leaves a board that looks up to date and
+             is not. Any failure — a dropped network, an expired login — is said
+             out loud here. --}}
+        <template x-if="!connection.ok">
+            <div class="mb-3 rounded-xl border-2 border-rose-400 bg-rose-50 dark:bg-rose-950/40 px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                    <div class="font-bold text-rose-700 dark:text-rose-300">⚠️ توقف تحديث الطلبات</div>
+                    <div class="text-sm text-rose-600 dark:text-rose-400" x-text="connection.error"></div>
+                </div>
+                <button class="modal-btn-confirm" style="background:#e11d48" @click="window.location.reload()">إعادة تحميل الصفحة</button>
+            </div>
+        </template>
+
+        {{-- ─── shift strip (live, from the same poll as the cards) ────────── --}}
+        <template x-if="shiftOpen && summary">
+            <div class="shift-strip mb-3">
+                <div class="flex items-center justify-between flex-wrap gap-3">
+                    <div class="flex items-center gap-6 flex-wrap">
+                        <div class="flex items-center gap-2">
+                            <span class="text-lg">🕐</span>
+                            <div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400">الوردية مفتوحة منذ</div>
+                                <div class="text-sm font-bold" x-text="summary.openedAt"></div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-lg">📦</span>
+                            <div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400">طلبات الوردية</div>
+                                <div class="text-sm font-bold" x-text="summary.orders"></div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-lg">📈</span>
+                            <div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400">صافي المبيعات</div>
+                                <div class="text-sm font-bold" x-text="money(summary.net)"></div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-lg">💰</span>
+                            <div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400">النقد المتوقع</div>
+                                <div class="text-sm font-bold" x-text="money(summary.expectedCash)"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 text-xs text-gray-500">
+                        <div class="pulse-dot"></div>
+                        <span x-text="'آخر تحديث قبل ' + secondsSince() + ' ث'"></span>
+                        <span>·</span>
+                        <span x-text="networkPrinter ? '🖨️ شبكية' : '🖨️ المتصفح'"></span>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <template x-if="!shiftOpen">
+            <div class="shift-strip mb-3 text-center py-4">
+                <div class="text-3xl mb-1">🔒</div>
+                <div class="font-bold text-lg">لا توجد وردية مفتوحة</div>
+                <div class="text-sm text-gray-500 mt-1">افتح وردية من زر «فتح وردية» أعلى الصفحة لتظهر الطلبات وتُطبع.</div>
+                <template x-if="waiting > 0">
+                    <div class="mt-2 inline-block rounded-full bg-amber-100 text-amber-800 px-3 py-1 text-sm font-bold" x-text="'⏳ ' + waiting + ' طلب بانتظار فتح الوردية'"></div>
+                </template>
+            </div>
+        </template>
+
         {{-- ─── status filters ───────────────────────────────────────────── --}}
         <div class="filter-section">
             <div class="flex items-center gap-2 flex-wrap">
@@ -736,6 +762,7 @@
                         'border-delivery': order.deliveryMethod === 'delivery',
                         'border-pickup':   order.deliveryMethod === 'pickup',
                         'border-dine-in':  order.deliveryMethod === 'dine-in',
+                        'ring-4 ring-green-400': freshRefs[order.reference],
                     }"
                 >
                     {{-- Card header: status + reference --}}
@@ -797,6 +824,14 @@
                         </template>
                     </div>
 
+                    {{-- Customer notes — only when the customer wrote something --}}
+                    <template x-if="order.notes">
+                        <div class="mb-3 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-2.5 py-2">
+                            <div class="text-xs font-bold text-amber-700 dark:text-amber-400 mb-0.5">📝 ملاحظات الزبون</div>
+                            <div class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-line" x-text="order.notes"></div>
+                        </div>
+                    </template>
+
                     {{-- Driver info --}}
                     <template x-if="order.driver">
                         <div class="driver-info mb-3">
@@ -846,8 +881,8 @@
                         <div class="text-xs text-rose-600 bg-rose-50 dark:bg-rose-900/20 rounded-lg px-2 py-1 mb-2" x-text="'⚠ ' + order.printError"></div>
                     </template>
 
-                    {{-- Cash tendered + change calculator --}}
-                    <template x-if="!order.paid && order.paymentMethod === 'cash'">
+                    {{-- Cash: what was handed over, and where the change goes --}}
+                    <template x-if="!order.paid && order.paymentMethod === 'cash' && !order.final">
                         <div class="mb-3 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
                             <div class="flex items-center gap-2 mb-2">
                                 <span class="text-sm font-bold text-amber-700 dark:text-amber-400">💵 استلام نقدي</span>
@@ -861,6 +896,7 @@
                                     :placeholder="Number(order.total).toFixed(2)"
                                     class="flex-1 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 text-sm px-2 py-1.5 font-bold"
                                     x-model.number="tendered[order.reference]"
+                                    x-init="prefillTendered(order)"
                                     @input="calcChange(order)"
                                 >
                                 <span class="text-xs text-gray-500">₪</span>
@@ -871,14 +907,15 @@
                                     <span class="text-lg font-black text-green-700 dark:text-green-400" x-text="getChange(order).toFixed(2) + ' ₪'"></span>
                                 </div>
                             </template>
-                            <div class="flex items-center gap-1.5 mt-2">
-                                <button class="btn-pay flex-1" @click="payExact(order)">
-                                    💵 استلام بدون باقي
-                                </button>
+                            <div class="flex items-center gap-1.5 mt-2 flex-wrap">
+                                <template x-if="getChange(order) <= 0">
+                                    <button class="btn-pay flex-1" @click="payCash(order)">💵 استلام</button>
+                                </template>
                                 <template x-if="getChange(order) > 0">
-                                    <button class="btn-refund flex-1" style="background:#d97706" @click="openRefundModal(order)">
-                                        ↩️ استلام + طلب استرداد
-                                    </button>
+                                    <button class="btn-pay flex-1" @click="payCash(order)">👛 تحويل الباقي لمحفظة الزبون</button>
+                                </template>
+                                <template x-if="getChange(order) > 0">
+                                    <button class="btn-refund flex-1" style="background:#d97706" @click="openRefundModal(order)">↩️ استلام + طلب استرداد</button>
                                 </template>
                             </div>
                         </div>
@@ -893,13 +930,20 @@
                         </div>
                     </template>
 
-                    {{-- Create refund for already-paid cash orders --}}
-                    <template x-if="order.paid && order.paymentMethod === 'cash' && !order.final">
+                    {{-- A transfer waiting for its receipt to be checked --}}
+                    <template x-if="!order.paid && order.requiresReceipt && !order.final">
+                        <div class="mb-3">
+                            <button class="btn-pay w-full" style="background:#7c3aed" @click="openDetails(order)"
+                                x-text="order.hasReceipt ? '📎 مراجعة إشعار الدفع وتأكيده' : '📎 بانتظار إشعار الدفع — عرض الطلب'"></button>
+                        </div>
+                    </template>
+
+                    {{-- Change still owed on a paid cash order: the amount is computed --}}
+                    <template x-if="order.paid && order.paymentMethod === 'cash' && order.refundableChange > 0">
                         <div class="mb-3">
                             <button class="btn-refund w-full justify-center" style="background:#d97706; padding:0.5rem 1rem; font-size:0.8rem;"
-                                    @click="openStandaloneRefundModal(order)">
-                                ↩️ إنشاء طلب استرداد
-                            </button>
+                                    @click="openStandaloneRefundModal(order)"
+                                    x-text="'↩️ طلب استرداد الباقي ' + Number(order.refundableChange).toFixed(2) + ' ₪'"></button>
                         </div>
                     </template>
 
@@ -911,8 +955,8 @@
                         </div>
 
                         <div class="flex items-center gap-1.5 flex-wrap">
-                            {{-- Direct print --}}
-                            <button class="btn-print" @click="printDirect(order)" :disabled="printing[order.reference]">
+                            {{-- Print: from a hidden frame, which a browser never blocks --}}
+                            <button class="btn-print" @click="printOrder(order)" :disabled="printing[order.reference]">
                                 <template x-if="printing[order.reference]">
                                     <span>⏳ جاري...</span>
                                 </template>
@@ -920,6 +964,9 @@
                                     <span>🖨️ <span x-text="order.printed ? 'إعادة' : 'طباعة'"></span></span>
                                 </template>
                             </button>
+
+                            {{-- Details: items, payment receipt, everything — without leaving --}}
+                            <button class="btn-print" style="background:#475569" @click="openDetails(order)" title="تفاصيل الطلب">👁️</button>
 
                             {{-- Update status --}}
                             <template x-if="!order.final">
@@ -959,7 +1006,7 @@
                             <div class="text-center py-6 text-gray-500">
                                 <div class="text-3xl mb-2">🚫</div>
                                 <div class="font-bold">لا يوجد سائقون مفعّلون</div>
-                                <div class="text-sm mt-1">أضفهم من «السائقون» في القائمة الجانبية</div>
+                                <button class="mt-3 modal-btn-confirm" style="background:#2563eb" @click="openCreateDriver()">➕ إضافة سائق</button>
                             </div>
                         </template>
 
@@ -994,6 +1041,7 @@
                     </div>
 
                     <div class="px-5 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-end gap-2">
+                        <button @click="openCreateDriver()" class="modal-btn-cancel me-auto">➕ سائق جديد</button>
                         <button @click="closeModal()" class="modal-btn-cancel">إلغاء</button>
                         <button
                             @click="confirmDriver()"
@@ -1028,7 +1076,7 @@
                         <div class="text-sm font-bold mb-2">اختر الحالة الجديدة:</div>
                     </div>
 
-                    <div class="px-5 pb-4 space-y-2 max-h-[40vh] overflow-y-auto">
+                    <div class="px-5 pb-4 space-y-2 max-h-[55vh] overflow-y-auto">
                         <template x-for="option in modal.options" :key="option">
                             <div
                                 class="status-option"
@@ -1042,15 +1090,41 @@
                                 <span x-text="option"></span>
                             </div>
                         </template>
+
+                        {{-- A delivery goes on the road only with a driver: choose one here --}}
+                        <template x-if="modal.selectedStatus === 'في الطريق'">
+                            <div class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                                <div class="flex items-center justify-between mb-2">
+                                    <div class="text-sm font-bold">🚗 اختر السائق</div>
+                                    <button class="text-xs font-bold text-blue-600 hover:underline" @click="openCreateDriver()">➕ سائق جديد</button>
+                                </div>
+                                <template x-if="modal.drivers.length === 0">
+                                    <div class="text-center py-3 text-sm text-gray-500">لا يوجد سائقون مفعّلون — أضف سائقاً</div>
+                                </template>
+                                <template x-for="driver in modal.drivers" :key="driver.id">
+                                    <div class="driver-select-card mb-2"
+                                         :class="modal.selectedDriverId === driver.id ? 'selected' : ''"
+                                         @click="modal.selectedDriverId = driver.id">
+                                        <div class="flex items-center justify-between">
+                                            <div>
+                                                <div class="font-bold text-sm" x-text="driver.name"></div>
+                                                <div class="text-xs text-gray-500" x-text="[driver.company, driver.phone].filter(Boolean).join(' — ')"></div>
+                                            </div>
+                                            <span class="text-xs font-bold" :class="driver.busy ? 'text-red-600' : 'text-green-600'" x-text="driver.status"></span>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
                     </div>
 
                     <div class="px-5 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-end gap-2">
                         <button @click="closeModal()" class="modal-btn-cancel">إلغاء</button>
                         <button
                             @click="confirmStatus()"
-                            :disabled="!modal.selectedStatus"
+                            :disabled="!canConfirmStatus()"
                             class="modal-btn-confirm"
-                            :style="modal.selectedStatus ? 'background:#2563eb' : 'background:#9ca3af'"
+                            :style="canConfirmStatus() ? 'background:#2563eb' : 'background:#9ca3af'"
                         >✅ تأكيد</button>
                     </div>
                 </div>
@@ -1143,13 +1217,10 @@
                     </div>
 
                     <div class="p-5 space-y-3">
-                        <div>
-                            <label class="block text-sm font-bold mb-1">💰 مبلغ الاسترداد (₪)</label>
-                            <input type="number" step="0.01" min="0.01"
-                                :max="modal.orderTotal"
-                                x-model.number="modal.refundAmount"
-                                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 text-sm px-3 py-2 font-bold"
-                                placeholder="أدخل مبلغ الاسترداد">
+                        <div class="p-3 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 text-center">
+                            <div class="text-sm text-green-600">💰 مبلغ الاسترداد — محسوب تلقائياً</div>
+                            <div class="text-2xl font-black text-green-700" x-text="Number(modal.refundAmount).toFixed(2) + ' ₪'"></div>
+                            <div class="text-xs text-gray-500 mt-1" x-text="'المستلم ' + Number(modal.tendered).toFixed(2) + ' − الإجمالي ' + Number(modal.orderTotal).toFixed(2)"></div>
                         </div>
 
                         <div>
@@ -1203,60 +1274,213 @@
             </div>
         </template>
 
-        {{-- ─── driver settlements section ────────────────────────────────── --}}
-        <div class="mt-6" x-show="driverData.length > 0">
+        {{-- ─── order details window ─────────────────────────────────────── --}}
+        <template x-if="details">
+            <div class="modal-overlay" @click.self="details = null">
+                <div class="modal-content" style="max-width: 42rem;">
+                    <div class="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <div class="text-lg font-bold" x-text="'👁️ الطلب ' + details.reference"></div>
+                                <div class="text-sm text-gray-500" x-text="details.createdAt + ' — ' + details.status"></div>
+                            </div>
+                            <button @click="details = null" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+                        </div>
+                    </div>
+
+                    <div class="p-5 space-y-4 max-h-[70vh] overflow-y-auto text-sm">
+                        <div class="grid grid-cols-2 gap-2">
+                            <div><span class="text-gray-500">الزبون: </span><span class="font-bold" x-text="details.customerName || '—'"></span></div>
+                            <div><span class="text-gray-500">الهاتف: </span><a class="text-blue-600" :href="'tel:' + details.customerPhone" x-text="details.customerPhone || '—'"></a></div>
+                            <div><span class="text-gray-500">الاستلام: </span><span class="font-bold" x-text="kindLabel(details)"></span></div>
+                            <template x-if="details.scheduledFor">
+                                <div><span class="text-gray-500">الموعد: </span><span x-text="details.scheduledFor"></span></div>
+                            </template>
+                        </div>
+
+                        <template x-if="details.address && details.deliveryMethod === 'delivery'">
+                            <div><span class="text-gray-500">📍 العنوان: </span><span x-text="addressText(details.address)"></span></div>
+                        </template>
+
+                        <template x-if="details.notes">
+                            <div class="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-3 py-2">
+                                <div class="text-xs font-bold text-amber-700 mb-0.5">📝 ملاحظات الزبون</div>
+                                <div class="whitespace-pre-line" x-text="details.notes"></div>
+                            </div>
+                        </template>
+
+                        <div>
+                            <div class="font-bold mb-1">🛒 الأصناف</div>
+                            <template x-for="(item, i) in details.items" :key="i">
+                                <div class="py-1.5 border-b border-gray-100 dark:border-gray-800">
+                                    <div class="flex justify-between">
+                                        <span class="font-semibold" x-text="item.qty + ' × ' + item.name"></span>
+                                        <span class="font-bold" x-text="money(item.total)"></span>
+                                    </div>
+                                    <div class="text-xs text-gray-500" x-text="'سعر الوحدة ' + money(item.unit) + (item.description ? ' — ' + item.description : '')"></div>
+                                </div>
+                            </template>
+                        </div>
+
+                        <div class="space-y-1">
+                            <div class="flex justify-between"><span class="text-gray-500">المجموع</span><span x-text="money(details.subtotal)"></span></div>
+                            <template x-if="details.discount > 0">
+                                <div class="flex justify-between"><span class="text-gray-500" x-text="'الخصم' + (details.couponCode ? ' (' + details.couponCode + ')' : '')"></span><span x-text="'- ' + money(details.discount)"></span></div>
+                            </template>
+                            <template x-if="details.deliveryFee > 0">
+                                <div class="flex justify-between"><span class="text-gray-500">رسوم التوصيل</span><span x-text="money(details.deliveryFee)"></span></div>
+                            </template>
+                            <div class="flex justify-between text-base font-black"><span>الإجمالي</span><span x-text="money(details.total)"></span></div>
+                        </div>
+
+                        <div class="rounded-lg bg-gray-50 dark:bg-gray-800 p-3 space-y-1">
+                            <div class="flex justify-between"><span class="text-gray-500">طريقة الدفع</span><span class="font-bold" x-text="paymentLabel(details.paymentMethod)"></span></div>
+                            <template x-if="details.paidToAccount">
+                                <div class="flex justify-between"><span class="text-gray-500">إلى حساب</span><span class="font-bold" x-text="details.paidToAccount"></span></div>
+                            </template>
+                            <div class="flex justify-between">
+                                <span class="text-gray-500">الحالة</span>
+                                <span class="font-bold" :class="details.paid ? 'text-emerald-600' : 'text-rose-600'"
+                                      x-text="details.paid ? ('✅ مدفوع' + (details.paidAt ? ' — ' + details.paidAt : '') + (details.paidBy ? ' — ' + details.paidBy : '')) : '⏳ غير مدفوع'"></span>
+                            </div>
+                            <template x-if="details.tenderedAmount">
+                                <div class="flex justify-between"><span class="text-gray-500">المستلم نقداً</span><span x-text="money(details.tenderedAmount)"></span></div>
+                            </template>
+                            <template x-if="details.changeCredited > 0">
+                                <div class="flex justify-between"><span class="text-gray-500">باقٍ إلى المحفظة</span><span x-text="money(details.changeCredited)"></span></div>
+                            </template>
+                            <template x-if="details.refundableChange > 0">
+                                <div class="flex justify-between"><span class="text-gray-500">باقٍ لم يُعَد بعد</span><span class="font-bold text-amber-600" x-text="money(details.refundableChange)"></span></div>
+                            </template>
+                        </div>
+
+                        <template x-if="details.receiptImage || details.receiptNote">
+                            <div>
+                                <div class="font-bold mb-1">📎 إشعار الدفع</div>
+                                <template x-if="details.receiptImage">
+                                    <a :href="details.receiptImage" target="_blank" rel="noopener">
+                                        <img :src="details.receiptImage" alt="إشعار الدفع" class="rounded-lg border max-h-80 mx-auto">
+                                    </a>
+                                </template>
+                                <template x-if="details.receiptNote">
+                                    <div class="mt-2 text-gray-700 dark:text-gray-300 whitespace-pre-line" x-text="details.receiptNote"></div>
+                                </template>
+                            </div>
+                        </template>
+                        <template x-if="details.requiresReceipt && !details.receiptImage && !details.receiptNote">
+                            <div class="text-rose-600 font-bold">لم يرفع الزبون إشعار دفع بعد.</div>
+                        </template>
+
+                        <template x-if="details.refunds.length > 0">
+                            <div>
+                                <div class="font-bold mb-1">↩️ طلبات استرداد الباقي</div>
+                                <template x-for="(r, i) in details.refunds" :key="i">
+                                    <div class="flex justify-between items-center py-1 gap-2">
+                                        <span x-text="money(r.amount) + ' — ' + r.method"></span>
+                                        <span class="text-xs font-bold" x-text="({pending: 'بانتظار التحويل', completed: 'تم التحويل', rejected: 'مرفوض'})[r.status] || r.status"></span>
+                                        <template x-if="r.receipt">
+                                            <a class="text-xs text-blue-600" :href="r.receipt" target="_blank" rel="noopener">الإشعار</a>
+                                        </template>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+
+                        <template x-if="details.driver">
+                            <div><span class="text-gray-500">🚗 السائق: </span><span class="font-bold" x-text="[details.driver.name, details.driver.phone].filter(Boolean).join(' — ')"></span></div>
+                        </template>
+                    </div>
+
+                    <div class="px-5 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-end gap-2">
+                        <button @click="details = null" class="modal-btn-cancel">إغلاق</button>
+                        <button @click="printOrder({ reference: details.reference })" class="modal-btn-confirm" style="background:#475569">🖨️ طباعة</button>
+                        <template x-if="details.canConfirmTransfer">
+                            <button @click="confirmTransfer()" class="modal-btn-confirm" style="background:#16a34a">✅ تأكيد الدفع</button>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        {{-- ─── change refunds waiting for their transfer ─────────────────── --}}
+        <div class="mt-6" x-show="pendingRefundsList.length > 0">
             <div class="filter-section">
                 <div class="flex items-center justify-between mb-3">
                     <div class="flex items-center gap-2">
-                        <span class="text-lg">🚗</span>
-                        <span class="text-base font-bold">موازنة السائقين</span>
+                        <span class="text-lg">↩️</span>
+                        <span class="text-base font-bold">طلبات استرداد بانتظار التحويل</span>
+                        <span class="rounded-full bg-amber-100 text-amber-800 px-2 text-xs font-bold" x-text="pendingRefundsList.length"></span>
                     </div>
-                    <button @click="loadDriverSettlements()" class="text-xs text-blue-600 hover:underline">🔄 تحديث</button>
+                </div>
+                <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <template x-for="r in pendingRefundsList" :key="r.id">
+                        <div class="rounded-xl border-2 border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-3">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="font-black text-sm" x-text="r.reference"></span>
+                                <span class="text-lg font-black text-amber-700" x-text="money(r.amount)"></span>
+                            </div>
+                            <div class="text-sm font-bold" x-text="r.holderName"></div>
+                            <div class="text-xs text-gray-500" x-text="[r.holderPhone, r.method, r.at].filter(Boolean).join(' — ')"></div>
+                            <template x-if="r.notes">
+                                <div class="text-xs text-gray-600 mt-1" x-text="r.notes"></div>
+                            </template>
+                            <button class="btn-pay w-full mt-2" @click="completeRefund(r.id)">📎 رفع الإشعار وتأكيد التحويل</button>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        {{-- ─── drivers and what they are owed ────────────────────────────── --}}
+        <div class="mt-6">
+            <div class="filter-section">
+                <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+                    <div class="flex items-center gap-2">
+                        <span class="text-lg">🚗</span>
+                        <span class="text-base font-bold">السائقون وأرصدتهم</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button @click="openCreateDriver()" class="text-xs font-bold text-blue-600 hover:underline">➕ سائق جديد</button>
+                        <button @click="loadPanels()" class="text-xs text-blue-600 hover:underline">🔄 تحديث</button>
+                    </div>
                 </div>
 
+                <template x-if="driverData.length === 0">
+                    <div class="text-center py-4 text-sm text-gray-500">لا يوجد سائقون بعد — أضف أول سائق من «➕ سائق جديد».</div>
+                </template>
+
                 <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    <template x-for="(d, idx) in driverData" :key="idx">
+                    <template x-for="d in driverData" :key="d.id">
                         <div class="rounded-xl border-2 border-sky-200 dark:border-sky-800 bg-sky-50/50 dark:bg-sky-950/20 p-3">
                             <div class="flex items-center justify-between mb-2">
                                 <div>
-                                    <div class="font-bold text-sm" x-text="d.driver_name"></div>
-                                    <template x-if="d.driver_company">
-                                        <div class="text-xs text-gray-500" x-text="d.driver_company"></div>
-                                    </template>
+                                    <div class="font-bold text-sm" x-text="d.name"></div>
+                                    <div class="text-xs text-gray-500" x-text="[d.company, d.phone].filter(Boolean).join(' — ')"></div>
                                 </div>
-                                <template x-if="d.driver_phone">
-                                    <a class="text-xs text-blue-600" :href="'tel:' + d.driver_phone" x-text="'📞 ' + d.driver_phone"></a>
-                                </template>
+                                <span class="text-xs font-bold" :class="d.busy ? 'text-red-600' : 'text-green-600'" x-text="d.busy ? 'في توصيل' : 'متاح'"></span>
                             </div>
-
-                            <div class="grid grid-cols-3 gap-2 mb-2">
-                                <div class="text-center p-1.5 rounded-lg bg-white dark:bg-gray-800">
-                                    <div class="text-xs text-gray-500">الطلبات</div>
-                                    <div class="text-sm font-black" x-text="d.total_orders"></div>
-                                </div>
-                                <div class="text-center p-1.5 rounded-lg bg-white dark:bg-gray-800">
-                                    <div class="text-xs text-gray-500">الإجمالي</div>
-                                    <div class="text-sm font-black" x-text="Number(d.total_amount).toFixed(2) + ' ₪'"></div>
-                                </div>
-                                <div class="text-center p-1.5 rounded-lg bg-white dark:bg-gray-800">
-                                    <div class="text-xs text-gray-500">كاش مجموع</div>
-                                    <div class="text-sm font-black text-green-600" x-text="Number(d.cash_collected).toFixed(2) + ' ₪'"></div>
-                                </div>
+                            <div class="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-gray-800 mb-2">
+                                <span class="text-xs text-gray-500">الرصيد المستحق (رسوم التوصيل)</span>
+                                <span class="text-lg font-black" :class="d.balance > 0 ? 'text-amber-600' : 'text-gray-400'" x-text="money(d.balance)"></span>
                             </div>
-
-                            <details class="text-xs">
-                                <summary class="cursor-pointer text-blue-600 hover:underline">📋 تفاصيل الطلبات</summary>
-                                <div class="mt-1 space-y-1">
-                                    <template x-for="o in d.orders" :key="o.reference">
-                                        <div class="flex items-center justify-between p-1.5 rounded bg-white dark:bg-gray-800">
-                                            <span class="font-bold" x-text="o.reference"></span>
-                                            <span x-text="Number(o.total).toFixed(2) + ' ₪'"></span>
-                                            <span x-text="o.delivered_at"></span>
-                                            <span x-show="o.cash_collected" class="text-green-600 font-bold">💵</span>
-                                        </div>
-                                    </template>
-                                </div>
-                            </details>
+                            <template x-if="d.orders.length > 0">
+                                <details class="text-xs mb-2">
+                                    <summary class="cursor-pointer text-blue-600 hover:underline" x-text="'📋 ' + d.orders.length + ' توصيلة غير محوّلة'"></summary>
+                                    <div class="mt-1 space-y-1">
+                                        <template x-for="o in d.orders" :key="o.reference">
+                                            <div class="flex items-center justify-between p-1.5 rounded bg-white dark:bg-gray-800 gap-2">
+                                                <span class="font-bold" x-text="o.reference"></span>
+                                                <span x-text="o.at"></span>
+                                                <span x-text="o.delivered ? '✅ وصل' : '🚗 في الطريق'"></span>
+                                                <span class="font-bold" x-text="money(o.fee)"></span>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </details>
+                            </template>
+                            <template x-if="d.balance > 0">
+                                <button class="btn-pay w-full" @click="payDriver(d.id)">💸 رفع الإشعار — تم التحويل</button>
+                            </template>
                         </div>
                     </template>
                 </div>
@@ -1278,8 +1502,29 @@
                 changeCalc: {},
                 printing: {},
 
-                // Driver settlements data
+                // Drivers and what each is owed
                 driverData: [],
+
+                // Change refunds waiting for their transfer
+                pendingRefundsList: [],
+
+                // Order details window
+                details: null,
+
+                // Live connection state: a silent poll failure is how a board
+                // looks up to date while it is not.
+                connection: { ok: true, error: null, lastOk: null },
+                loading: false,
+                clock: Date.now(),
+
+                // Shift strip, from the same poll as the cards
+                shiftOpen: true,
+                summary: null,
+                waiting: 0,
+
+                // Orders already seen, so a new one can be announced
+                knownRefs: null,
+                freshRefs: {},
 
                 // Refund methods for the modal
                 refundMethods: [
@@ -1297,7 +1542,8 @@
                 statusGroups: {
                     new:       ['قيد المراجعة'],
                     preparing: ['جاري التحضير'],
-                    ready:     ['جاهز للاستلام', 'في الطريق'],
+                    ready:     ['جاهز للاستلام'],
+                    onway:     ['في الطريق'],
                     done:      ['تم التسليم', 'تم الاستلام'],
                     closed:    ['ملغي', 'مسترد'],
                 },
@@ -1305,9 +1551,10 @@
                 filterGroups: [
                     { key: 'status', label: 'حالة الطلب', options: [
                         { value: 'all',       label: 'كل الطلبات', icon: '📋' },
-                        { value: 'new',       label: 'جديد',       icon: '➕' },
-                        { value: 'preparing', label: 'قيد المراجعة', icon: '🔄' },
-                        { value: 'ready',     label: 'جاهز',       icon: '✅' },
+                        { value: 'new',       label: 'جديد',          icon: '➕' },
+                        { value: 'preparing', label: 'جاري التحضير',  icon: '🔄' },
+                        { value: 'ready',     label: 'جاهز للاستلام', icon: '✅' },
+                        { value: 'onway',     label: 'في الطريق',     icon: '🚗' },
                         { value: 'done',      label: 'مكتمل',      icon: '✔️' },
                         { value: 'closed',    label: 'ملغي / مسترد', icon: '❌' },
                     ]},
@@ -1332,33 +1579,104 @@
                 poll: config.poll,
                 autoPrint: config.autoPrint,
                 width: config.width,
+                networkPrinter: config.networkPrinter,
                 printed: new Set(),
                 timer: null,
 
                 start() {
                     this.refresh();
-                    this.loadDriverSettlements();
-                    this.timer = setInterval(() => this.refresh(), this.poll * 1000);
-                    // Refresh driver data every 2 minutes
-                    setInterval(() => this.loadDriverSettlements(), 120000);
+                    this.loadPanels();
+                    this.timer = setInterval(() => this.refresh(), Math.max(2, this.poll) * 1000);
+                    setInterval(() => this.loadPanels(), 20000);
+                    setInterval(() => { this.clock = Date.now(); }, 1000);
                     document.addEventListener('visibilitychange', () => {
-                        if (!document.hidden) { this.refresh(); this.loadDriverSettlements(); }
+                        if (!document.hidden) { this.refresh(); this.loadPanels(); }
                     });
                 },
 
+                // Fired by the server after a change made from a window on this
+                // screen: a driver added, a refund paid, a shift opened or closed.
+                onServerRefresh() {
+                    this.refresh();
+                    this.loadPanels();
+                    if (this.modal.type === 'status' || this.modal.type === 'driver') {
+                        this.$wire.drivers().then(list => { this.modal.drivers = list; });
+                    }
+                },
+
                 async refresh() {
+                    if (this.loading) return;
+                    this.loading = true;
                     try {
                         const res = await fetch(config.queueUrl, {
-                            headers: { 'Accept': 'application/json' },
+                            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                             credentials: 'same-origin',
+                            cache: 'no-store',
                         });
-                        if (!res.ok) return;
+                        const type = res.headers.get('content-type') || '';
+
+                        // An expired login answers with the login page, not an
+                        // error — so anything that is not JSON is treated as one.
+                        if (res.status === 401 || res.status === 419 || res.redirected || !type.includes('application/json')) {
+                            this.connection = { ok: false, lastOk: this.connection.lastOk, error: 'انتهت جلسة الدخول — أعد تحميل الصفحة وسجّل الدخول.' };
+                            return;
+                        }
+                        if (!res.ok) {
+                            this.connection = { ok: false, lastOk: this.connection.lastOk, error: 'الخادم لا يستجيب (' + res.status + ') — تُعاد المحاولة تلقائياً.' };
+                            return;
+                        }
+
                         const data = await res.json();
-                        this.orders = data.orders;
+                        this.shiftOpen = data.shiftOpen !== false;
+                        this.summary = data.summary || null;
+                        this.waiting = data.waiting || 0;
+                        this.networkPrinter = !!data.networkPrinter;
+                        this.announceNew(data.orders || []);
+                        this.orders = data.orders || [];
+                        this.connection = { ok: true, error: null, lastOk: Date.now() };
                         if (this.autoPrint) this.printNew();
                     } catch (e) {
-                        // Dropped poll — next tick picks it up.
+                        this.connection = { ok: false, lastOk: this.connection.lastOk, error: 'انقطع الاتصال بالخادم — تُعاد المحاولة تلقائياً.' };
+                    } finally {
+                        this.loading = false;
                     }
+                },
+
+                secondsSince() {
+                    if (!this.connection.lastOk) return '—';
+                    return Math.max(0, Math.round((this.clock - this.connection.lastOk) / 1000));
+                },
+
+                // A new order gets a short tone and a highlight, so it is noticed
+                // while the cashier is looking at the customer, not the screen.
+                announceNew(list) {
+                    const refs = list.map(o => o.reference);
+                    if (this.knownRefs === null) { this.knownRefs = new Set(refs); return; }
+                    const fresh = refs.filter(r => !this.knownRefs.has(r));
+                    fresh.forEach(r => {
+                        this.knownRefs.add(r);
+                        this.freshRefs[r] = true;
+                        setTimeout(() => { delete this.freshRefs[r]; }, 15000);
+                    });
+                    if (fresh.length) this.beep();
+                },
+
+                beep() {
+                    try {
+                        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.frequency.value = 880;
+                        gain.gain.value = 0.15;
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.start();
+                        setTimeout(() => { osc.stop(); ctx.close(); }, 250);
+                    } catch (e) { /* no sound is not worth an error */ }
+                },
+
+                money(value) {
+                    return Number(value || 0).toFixed(2) + ' ₪';
                 },
 
                 // ─── filtering ──────────────────────────────────────────────
@@ -1442,35 +1760,41 @@
 
                 printNew() {
                     this.orders
-                        .filter(o => !o.printed && !this.printed.has(o.reference))
+                        .filter(o => !o.printed && !o.final && !this.printed.has(o.reference))
                         .forEach(o => this.print(o, true));
                 },
 
+                // Printed from a hidden frame on this page, not a new window. A
+                // browser blocks windows that are not opened straight from a
+                // click — which is why printing from this screen did nothing
+                // while the orders page, a plain link, worked.
                 print(order, auto) {
                     this.printed.add(order.reference);
                     const url = config.printUrl + '/' + encodeURIComponent(order.reference)
-                        + '?width=' + this.width + (auto ? '&auto=1' : '');
-                    window.open(url, 'receipt-' + order.reference, 'width=420,height=700');
+                        + '?width=' + this.width + '&auto=1';
+                    const frame = document.createElement('iframe');
+                    frame.setAttribute('aria-hidden', 'true');
+                    frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:420px;height:800px;border:0;';
+                    frame.src = url;
+                    document.body.appendChild(frame);
+                    setTimeout(() => frame.remove(), 120000);
                 },
 
-                // Direct print — no preview window
-                async printDirect(order) {
+                async printOrder(order) {
+                    if (!this.networkPrinter) {
+                        this.print(order, false);
+                        setTimeout(() => this.refresh(), 1500);
+                        return;
+                    }
                     this.printing[order.reference] = true;
                     try {
                         const result = await this.$wire.printDirect(order.reference);
-                        if (result.success) {
-                            this.printed.add(order.reference);
-                            this.refresh();
-                            await this.$wire.sendPrintAlert('✅ تمت الطباعة بنجاح', 'تم إرسال الإيصال للطابعة — الطلب: ' + order.reference, 'success');
-                        } else {
-                            await this.$wire.sendPrintAlert('⚠️ الطابعة غير متصلة', 'سيتم فتح نافذة الطباعة بدلاً...', 'warning');
-                            this.print(order, false);
-                        }
+                        if (!result.success) this.print(order, false);
                     } catch (e) {
-                        await this.$wire.sendPrintAlert('❌ خطأ في الطباعة', 'سيتم فتح نافذة الطباعة بدلاً...', 'danger');
                         this.print(order, false);
                     } finally {
                         this.printing[order.reference] = false;
+                        this.refresh();
                     }
                 },
 
@@ -1479,22 +1803,40 @@
                 async openStatusModal(order) {
                     const options = await this.$wire.nextStatuses(order.reference);
                     if (!options.length) return;
+                    const drivers = order.deliveryMethod === 'delivery' ? await this.$wire.drivers() : [];
                     this.modal = {
                         type: 'status',
                         reference: order.reference,
+                        deliveryMethod: order.deliveryMethod,
                         currentStatus: order.status,
                         options: options,
                         selectedStatus: null,
-                        drivers: [],
+                        drivers: drivers,
                         selectedDriverId: null,
                     };
                 },
 
+                canConfirmStatus() {
+                    if (!this.modal.selectedStatus) return false;
+                    if (this.modal.selectedStatus === 'في الطريق') return !!this.modal.selectedDriverId;
+                    return true;
+                },
+
                 async confirmStatus() {
-                    if (!this.modal.selectedStatus) return;
-                    await this.$wire.advance(this.modal.reference, this.modal.selectedStatus);
+                    if (!this.canConfirmStatus()) return;
+                    if (this.modal.selectedStatus === 'في الطريق') {
+                        // Choosing the driver is what puts the order on the road.
+                        await this.$wire.assignDriver(this.modal.reference, this.modal.selectedDriverId);
+                    } else {
+                        await this.$wire.advance(this.modal.reference, this.modal.selectedStatus);
+                    }
                     this.closeModal();
                     this.refresh();
+                    this.loadPanels();
+                },
+
+                openCreateDriver() {
+                    this.$wire.mountAction('createDriver');
                 },
 
                 async openDriverModal(order) {
@@ -1532,9 +1874,20 @@
                     return this.changeCalc[order.reference] || 0;
                 },
 
-                // Pay exact (no change)
-                async payExact(order) {
-                    await this.$wire.markPaid(order.reference);
+                // Pre-fill what the customer declared in the app, if anything.
+                prefillTendered(order) {
+                    if (this.tendered[order.reference] === undefined && order.tenderedAmount) {
+                        this.tendered[order.reference] = Number(order.tenderedAmount);
+                        this.calcChange(order);
+                    }
+                },
+
+                // Take the cash; anything above the total goes to the wallet.
+                async payCash(order) {
+                    const t = parseFloat(this.tendered[order.reference]) || 0;
+                    await this.$wire.markPaidToWallet(order.reference, t);
+                    delete this.tendered[order.reference];
+                    delete this.changeCalc[order.reference];
                     this.refresh();
                 },
 
@@ -1569,12 +1922,14 @@
                     this.refresh();
                 },
 
-                // Standalone refund for already-paid cash orders
+                // Change still owed on a paid cash order. The amount comes from the
+                // server's own figures and cannot be edited here.
                 openStandaloneRefundModal(order) {
                     this.modal = {
                         type: 'standalone-refund',
                         reference: order.reference,
-                        refundAmount: 0,
+                        refundAmount: Number(order.refundableChange) || 0,
+                        tendered: Number(order.tenderedAmount) || 0,
                         holderName: order.customerName || '',
                         holderPhone: order.customerPhone || '',
                         refundMethod: null,
@@ -1588,7 +1943,6 @@
                     if (!this.modal.refundMethod || !this.modal.refundAmount) return;
                     await this.$wire.createStandaloneRefund(
                         this.modal.reference,
-                        this.modal.refundAmount,
                         {
                             holder_name: this.modal.holderName,
                             holder_phone: this.modal.holderPhone,
@@ -1598,14 +1952,40 @@
                     );
                     this.closeModal();
                     this.refresh();
+                    this.loadPanels();
                 },
 
-                // ─── driver settlements ──────────────────────────────────────
+                // ─── panels & windows ───────────────────────────────────────
 
-                async loadDriverSettlements() {
+                async loadPanels() {
                     try {
-                        this.driverData = await this.$wire.driverSettlements();
-                    } catch (e) { /* silent */ }
+                        this.driverData = await this.$wire.driverBalances();
+                        this.pendingRefundsList = await this.$wire.pendingRefunds();
+                    } catch (e) { /* the next tick retries */ }
+                },
+
+                async openDetails(order) {
+                    this.details = await this.$wire.orderDetails(order.reference);
+                },
+
+                async confirmTransfer() {
+                    if (!this.details) return;
+                    await this.$wire.confirmTransferPayment(this.details.reference);
+                    this.details = await this.$wire.orderDetails(this.details.reference);
+                    this.refresh();
+                },
+
+                completeRefund(id) {
+                    this.$wire.mountAction('completeRefund', { id: id });
+                },
+
+                payDriver(id) {
+                    this.$wire.mountAction('payDriver', { driver: id });
+                },
+
+                addressText(address) {
+                    if (!address) return '';
+                    return [address.city, address.area, address.street, address.landmark].filter(Boolean).join('، ');
                 },
 
                 // ─── labels & styling helpers ───────────────────────────────

@@ -14,7 +14,13 @@ use App\Models\User;
  * counter looks up all day.
  */
 
-beforeEach(fn () => $this->actingAs(User::factory()->create()));
+beforeEach(function () {
+    $this->actingAs($user = User::factory()->create());
+
+    // The feed shows the open shift's orders; opened an hour ago so the orders
+    // each test places fall inside it.
+    App\Models\CashierShift::create(['user_id' => $user->id, 'opened_at' => now()->subHour(), 'opening_float' => 0]);
+});
 
 function feedOrder(array $attributes = []): Order
 {

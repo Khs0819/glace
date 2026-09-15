@@ -5,6 +5,8 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\DriverResource\Pages;
 use App\Models\Driver;
 use App\Models\Order;
+use App\Services\Drivers\DriverPayoutService;
+use Filament\Notifications\Notification;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -94,6 +96,14 @@ class DriverResource extends Resource
                     ->label('توصيلات')
                     ->badge()
                     ->color('gray'),
+
+                // Delivery fees earned and not yet transferred.
+                Tables\Columns\TextColumn::make('balance')
+                    ->label('الرصيد المستحق')
+                    ->state(fn (Driver $record) => $record->balance())
+                    ->formatStateUsing(fn ($state) => number_format((float) $state, 2) . ' ₪')
+                    ->weight('bold')
+                    ->color(fn ($state) => (float) $state > 0 ? 'warning' : 'gray'),
             ])
             ->filters([
                 Tables\Filters\TernaryFilter::make('active')->label('مفعّل'),
@@ -104,6 +114,32 @@ class DriverResource extends Resource
                         ->whereDoesntHave('activeOrders')),
             ])
             ->actions([
+                Tables\Actions\Action::make('payDriver')
+                    ->label('تم التحويل')
+                    ->icon('heroicon-o-banknotes')
+                    ->color('success')
+                    ->visible(fn (Driver $record) => $record->balance() > 0)
+                    ->modalHeading(fn (Driver $record) => 'تحويل رصيد ' . $record->name)
+                    ->modalDescription(fn (Driver $record) => 'المستحق: ' . number_format($record->balance(), 2) . ' ₪')
+                    ->form([
+                        Forms\Components\FileUpload::make('receipt')
+                            ->label('إشعار التحويل')
+                            ->image()
+                            ->disk('public')
+                            ->directory('driver-payouts')
+                            ->maxSize(4096)
+                            ->required(),
+                        Forms\Components\Textarea::make('notes')->label('ملاحظات')->rows(2),
+                    ])
+                    ->action(function (Driver $record, array $data) {
+                        $payout = app(DriverPayoutService::class)
+                            ->pay($record, $data['receipt'] ?? null, $data['notes'] ?? null, auth()->id());
+
+                        $payout
+                            ? Notification::make()->title('تم تحويل ' . number_format($payout->amount, 2) . ' ₪')->success()->send()
+                            : Notification::make()->title('لا يوجد رصيد مستحق')->warning()->send();
+                    }),
+
                 Tables\Actions\EditAction::make()->label('تعديل'),
             ])
             ->emptyStateHeading('لا يوجد سائقون')

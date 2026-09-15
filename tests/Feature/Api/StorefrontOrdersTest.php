@@ -615,13 +615,12 @@ it('offers only the steps that make sense for the delivery method', function () 
 
     $delivery = new Order(['delivery_method' => 'delivery', 'status' => Order::FULFILMENT_PREPARING]);
 
-    // Never "جاهز للاستلام" for a delivery — the storefront's tracker has no
-    // such step to draw.
-    expect($delivery->allowedNextStatuses())->toBe(['في الطريق', 'تم الاستلام', 'ملغي', 'مسترد']);
+    // A delivery is made ready at the counter before it goes on the road.
+    expect($delivery->allowedNextStatuses())->toBe(['جاهز للاستلام', 'في الطريق', 'تم الاستلام', 'ملغي', 'مسترد']);
 
     $dineIn = new Order(['delivery_method' => 'dine-in', 'status' => Order::FULFILMENT_REVIEW]);
 
-    expect($dineIn->allowedNextStatuses())->toBe(['تم التسليم', 'ملغي', 'مسترد']);
+    expect($dineIn->allowedNextStatuses())->toBe(['جاري التحضير', 'جاهز للاستلام', 'تم التسليم', 'ملغي', 'مسترد']);
 });
 
 it('offers nothing once an order is closed', function () {

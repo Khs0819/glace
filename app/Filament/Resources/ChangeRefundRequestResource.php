@@ -69,6 +69,13 @@ class ChangeRefundRequestResource extends Resource
                 ->label('ملاحظات')
                 ->disabled()
                 ->columnSpanFull(),
+
+            Forms\Components\FileUpload::make('transfer_receipt')
+                ->label('إشعار التحويل')
+                ->image()
+                ->disk('public')
+                ->disabled()
+                ->columnSpanFull(),
         ]);
     }
 
@@ -139,6 +146,11 @@ class ChangeRefundRequestResource extends Resource
                     ->label('ملاحظات')
                     ->limit(30)
                     ->placeholder('—'),
+
+                Tables\Columns\ImageColumn::make('transfer_receipt')
+                    ->label('الإشعار')
+                    ->disk('public')
+                    ->height(36),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
@@ -163,11 +175,23 @@ class ChangeRefundRequestResource extends Resource
                         "هل تم تحويل {$record->amount} ₪ إلى {$record->holder_name} عبر {$record->methodLabel()}؟"
                     )
                     ->visible(fn (ChangeRefundRequest $record) => $record->isPending())
-                    ->action(function (ChangeRefundRequest $record) {
+                    ->form([
+                        // The slip is the evidence the change went back; without
+                        // it "completed" is only somebody's word.
+                        Forms\Components\FileUpload::make('transfer_receipt')
+                            ->label('إشعار التحويل للزبون')
+                            ->image()
+                            ->disk('public')
+                            ->directory('refund-receipts')
+                            ->maxSize(4096)
+                            ->required(),
+                    ])
+                    ->action(function (ChangeRefundRequest $record, array $data) {
                         $record->update([
-                            'status'      => 'completed',
-                            'reviewed_by' => auth()->id(),
-                            'reviewed_at' => now(),
+                            'status'           => 'completed',
+                            'transfer_receipt' => $data['transfer_receipt'] ?? null,
+                            'reviewed_by'      => auth()->id(),
+                            'reviewed_at'      => now(),
                         ]);
                         Notification::make()->title('تم تأكيد التحويل')->success()->send();
                     }),
