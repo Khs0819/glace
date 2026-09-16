@@ -63,6 +63,10 @@ RUN npm run build
 
 # إعدادات Nginx و Supervisor
 COPY ./docker/nginx.conf /etc/nginx/nginx.conf
+
+# PHP upload limits. Without this the image runs on PHP's built-in 2 MB limit and
+# any larger dashboard upload (a QR code, a product photo) silently fails.
+COPY ./docker/php-uploads.ini /usr/local/etc/php/conf.d/zz-uploads.ini
 COPY ./docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Laravel permissions

@@ -105,7 +105,7 @@ class PaymentAccountResource extends Resource
                     ->directory('payment-accounts')
                     ->maxSize(4096)
                     ->imageEditor()
-                    ->helperText('يُعرض للزبون ليمسحه بتطبيق البنك أو المحفظة'),
+                    ->helperText('يُعرض للزبون ليمسحه بتطبيق البنك أو المحفظة — حتى 4 ميغابايت. انتظر اكتمال الرفع قبل الحفظ.'),
 
                 Forms\Components\TextInput::make('sort_order')
                     ->label('الترتيب')
@@ -132,6 +132,20 @@ class PaymentAccountResource extends Resource
                     ->label('الحساب')
                     ->copyable()
                     ->description(fn (PaymentAccount $record) => $record->primary_label),
+
+                // A transfer account without a working QR is what makes the
+                // storefront fall back to a placeholder a customer might scan.
+                Tables\Columns\TextColumn::make('qr_status')
+                    ->label('حالة QR')
+                    ->state(fn (PaymentAccount $record) => $record->qrImageStatus())
+                    ->formatStateUsing(fn (string $state) => match ($state) {
+                        'ok'           => 'مرفوع',
+                        'missing-file' => 'الملف مفقود — أعد الرفع',
+                        default        => 'غير مرفوع',
+                    })
+                    ->badge()
+                    ->color(fn (string $state) => $state === 'ok' ? 'success' : 'danger')
+                    ->visible(true),
 
                 Tables\Columns\IconColumn::make('active')->label('مفعّل')->boolean(),
             ])

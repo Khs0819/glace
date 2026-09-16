@@ -808,3 +808,25 @@ it('requires and updates the sender name when a receipt is replaced', function (
         ->assertOk()
         ->assertJsonPath('order.senderAccountName', 'محمود سالم');
 });
+
+it('accepts "paypal" as PalPay for an order', function () {
+    // The storefront still sends the old key in places.
+    test()->post('/api/orders', storefrontPayload([
+        'paymentMethod' => 'paypal',
+        'receiptNote'   => 'حوّلت',
+    ]), $this->headers)
+        ->assertCreated()
+        ->assertJsonPath('paymentMethod', 'palpay');
+
+    expect(Order::sole()->sender_account_name)->toBe('أحمد علي');
+});
+
+it('refuses a PalPay order sent as "paypal" without the sender name', function () {
+    test()->post('/api/orders', storefrontPayload([
+        'paymentMethod'     => 'paypal',
+        'receiptNote'       => 'حوّلت',
+        'senderAccountName' => '',
+    ]), $this->headers)
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('senderAccountName');
+});

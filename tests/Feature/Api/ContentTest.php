@@ -15,6 +15,8 @@ beforeEach(fn () => fakePublicDisk());
 // ─── payment accounts ───────────────────────────────────────────────────────
 
 it('serves the shop payment accounts in the storefront shape', function () {
+    Illuminate\Support\Facades\Storage::disk('public')->put('payment-accounts/bop-qr.png', 'png');
+
     PaymentAccount::create([
         'method'          => 'bop',
         'qr_image'        => 'payment-accounts/bop-qr.png',

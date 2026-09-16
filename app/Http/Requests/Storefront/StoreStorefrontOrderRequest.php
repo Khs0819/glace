@@ -28,6 +28,12 @@ class StoreStorefrontOrderRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        // PalPay was once keyed as "paypal", and the storefront still sends that
+        // name in places. Read it as palpay rather than refuse the order.
+        if ($this->input('paymentMethod') === 'paypal') {
+            $this->merge(['paymentMethod' => 'palpay']);
+        }
+
         $items = $this->input('items');
 
         // JSON.stringify'd by the frontend to survive multipart. A body that is

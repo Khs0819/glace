@@ -2,8 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use App\Support\MediaUrl;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Where the shop is paid, per payment method (handoff 13).
@@ -52,9 +53,35 @@ class PaymentAccount extends Model
 
     protected $casts = ['active' => 'boolean'];
 
-    /** Absolute, per the media contract in swagger.yaml — never a bare path. */
+    /**
+     * Absolute, per the media contract in swagger.yaml — never a bare path.
+     *
+     * Null when the stored file is gone (a lost volume, a failed upload): a
+     * customer scans this to send money, and a link to nothing is worse than
+     * no code at all.
+     */
     public function qrImageUrl(): ?string
     {
-        return MediaUrl::resolve($this->qr_image);
+        return $this->qrImageStatus() === 'ok' ? MediaUrl::resolve($this->qr_image) : null;
+    }
+
+    /**
+     * Where the QR image stands, for diagnosis.
+     *
+     * @return 'ok'|'none'|'missing-file'
+     */
+    public function qrImageStatus(): string
+    {
+        $path = (string) $this->qr_image;
+
+        if ($path === '') {
+            return 'none';
+        }
+
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+            return 'ok';
+        }
+
+        return Storage::disk('public')->exists($path) ? 'ok' : 'missing-file';
     }
 }

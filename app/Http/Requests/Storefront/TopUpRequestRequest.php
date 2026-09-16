@@ -14,6 +14,14 @@ class TopUpRequestRequest extends FormRequest
         return $this->user() !== null;
     }
 
+    protected function prepareForValidation(): void
+    {
+        // PalPay was once keyed as "paypal"; accept the old name.
+        if ($this->input('method') === 'paypal') {
+            $this->merge(['method' => 'palpay']);
+        }
+    }
+
     /** @return array<string, array<int, mixed>> */
     public function rules(): array
     {
