@@ -16,6 +16,11 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Safe to run again after a partial run (MySQL cannot roll back DDL).
+        if (Schema::hasColumn('orders', 'captain_note')) {
+            return;
+        }
+
         Schema::table('orders', function (Blueprint $table) {
             $table->text('captain_note')->nullable()->after('notes');
         });

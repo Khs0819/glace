@@ -19,13 +19,19 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('orders', function (Blueprint $table) {
-            $table->string('sender_account_name', 190)->nullable()->after('receipt_note');
-        });
+        // Each table checked on its own, so a run that stopped between the two
+        // can be run again and finish.
+        if (! Schema::hasColumn('orders', 'sender_account_name')) {
+            Schema::table('orders', function (Blueprint $table) {
+                $table->string('sender_account_name', 190)->nullable()->after('receipt_note');
+            });
+        }
 
-        Schema::table('topup_requests', function (Blueprint $table) {
-            $table->string('sender_account_name', 190)->nullable()->after('receipt_note');
-        });
+        if (! Schema::hasColumn('topup_requests', 'sender_account_name')) {
+            Schema::table('topup_requests', function (Blueprint $table) {
+                $table->string('sender_account_name', 190)->nullable()->after('receipt_note');
+            });
+        }
     }
 
     public function down(): void

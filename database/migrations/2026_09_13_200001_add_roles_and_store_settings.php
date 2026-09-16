@@ -21,9 +21,21 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('users', function (Blueprint $table) {
-            $table->string('role')->default('manager')->after('email');
-        });
+        /*
+         * Every step checks first.
+         *
+         * `role` used to be added unconditionally, before `account_number`. On
+         * MySQL a schema change cannot be rolled back, so once this migration
+         * had stopped part-way, every later run failed on the duplicate `role`
+         * column — and neither `account_number` nor any migration after this
+         * one was ever created. Saving a payment account then failed with
+         * "Unknown column 'account_number'".
+         */
+        if (! Schema::hasColumn('users', 'role')) {
+            Schema::table('users', function (Blueprint $table) {
+                $table->string('role')->default('manager')->after('email');
+            });
+        }
 
         if (! Schema::hasColumn('payment_accounts', 'account_number')) {
             Schema::table('payment_accounts', function (Blueprint $table) {
@@ -31,14 +43,17 @@ return new class extends Migration
             });
         }
 
-        Schema::create('store_settings', function (Blueprint $table) {
-            $table->string('key')->primary();
-            $table->text('value')->nullable();
-            $table->timestamps();
-        });
+        if (! Schema::hasTable('store_settings')) {
+            Schema::create('store_settings', function (Blueprint $table) {
+                $table->string('key')->primary();
+                $table->text('value')->nullable();
+                $table->timestamps();
+            });
+        }
 
-        // Seed default settings
-        DB::table('store_settings')->insert([
+        // Defaults only for keys not set yet: a re-run must not reopen a store
+        // the dashboard has closed.
+        DB::table('store_settings')->insertOrIgnore([
             ['key' => 'store_open',            'value' => '1', 'created_at' => now(), 'updated_at' => now()],
             ['key' => 'delivery_open',         'value' => '1', 'created_at' => now(), 'updated_at' => now()],
             ['key' => 'auto_confirm_minutes',  'value' => '30', 'created_at' => now(), 'updated_at' => now()],

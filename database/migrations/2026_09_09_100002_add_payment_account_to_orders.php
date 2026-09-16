@@ -19,6 +19,11 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // Safe to run again after a partial run (MySQL cannot roll back DDL).
+        if (Schema::hasColumn('orders', 'payment_account_id')) {
+            return;
+        }
+
         Schema::table('orders', function (Blueprint $table) {
             $table->foreignId('payment_account_id')->nullable()->after('payment_method')
                 ->constrained('payment_accounts')->nullOnDelete();

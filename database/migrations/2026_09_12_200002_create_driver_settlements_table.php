@@ -16,6 +16,11 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Safe to run again after a partial run (MySQL cannot roll back DDL).
+        if (Schema::hasTable('driver_settlements')) {
+            return;
+        }
+
         Schema::create('driver_settlements', function (Blueprint $table) {
             $table->id();
             $table->foreignId('driver_id')->constrained();

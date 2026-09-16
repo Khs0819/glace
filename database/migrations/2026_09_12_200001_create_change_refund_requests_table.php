@@ -20,6 +20,11 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Safe to run again after a partial run (MySQL cannot roll back DDL).
+        if (Schema::hasTable('change_refund_requests')) {
+            return;
+        }
+
         Schema::create('change_refund_requests', function (Blueprint $table) {
             $table->id();
             $table->foreignUuid('order_id')->constrained()->cascadeOnDelete();

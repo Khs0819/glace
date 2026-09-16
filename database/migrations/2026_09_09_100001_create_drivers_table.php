@@ -22,30 +22,35 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('drivers', function (Blueprint $table) {
-            $table->id();
-            $table->string('name');
-            $table->string('company')->nullable();
-            $table->string('phone', 20);
+        // Every step checks first: MySQL cannot roll a schema change back, so a
+        // migration that stopped half way must be able to run again and finish.
+        if (! Schema::hasTable('drivers')) {
+            Schema::create('drivers', function (Blueprint $table) {
+                $table->id();
+                $table->string('name');
+                $table->string('company')->nullable();
+                $table->string('phone', 20);
 
-            // Off rather than deleted: a driver who has left still has to stay
-            // readable on the deliveries they made.
-            $table->boolean('active')->default(true);
-            $table->text('notes')->nullable();
-            $table->timestamps();
+                // Off rather than deleted: a driver who has left still has to
+                // stay readable on the deliveries they made.
+                $table->boolean('active')->default(true);
+                $table->text('notes')->nullable();
+                $table->timestamps();
 
-            $table->index(['active', 'name']);
-        });
+                $table->index(['active', 'name']);
+            });
+        }
 
-        Schema::table('orders', function (Blueprint $table) {
-            // The snapshot in `driver` stays: it is what the order looked like
-            // that day, and a driver later renamed or deleted must not rewrite
-            // history. This is the live link for everything else.
-            $table->foreignId('driver_id')->nullable()->after('driver')
-                ->constrained('drivers')->nullOnDelete();
+        if (! Schema::hasColumn('orders', 'driver_id')) {
+            Schema::table('orders', function (Blueprint $table) {
+                // The snapshot in `driver` stays: it is what the order looked
+                // like that day. This is the live link for everything else.
+                $table->foreignId('driver_id')->nullable()->after('driver')
+                    ->constrained('drivers')->nullOnDelete();
 
-            $table->index(['driver_id', 'status']);
-        });
+                $table->index(['driver_id', 'status']);
+            });
+        }
     }
 
     public function down(): void

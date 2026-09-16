@@ -23,36 +23,55 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('driver_payouts', function (Blueprint $table) {
-            $table->id();
+        // Every step checks first, so a run that stopped part-way (MySQL cannot
+        // roll back a schema change) can simply be run again.
+        if (! Schema::hasTable('driver_payouts')) {
+            Schema::create('driver_payouts', function (Blueprint $table) {
+                $table->id();
 
-            // Restrict, not cascade: deleting a driver must never delete the
-            // record of money paid to them. Drivers are switched off instead.
-            $table->foreignId('driver_id')->constrained();
-            $table->decimal('amount', 10, 2);
-            $table->string('receipt')->nullable();
-            $table->text('notes')->nullable();
-            $table->foreignId('paid_by')->nullable()->constrained('users')->nullOnDelete();
-            $table->timestamp('paid_at');
-            $table->timestamps();
+                // Restrict, not cascade: deleting a driver must never delete the
+                // record of money paid to them. Drivers are switched off instead.
+                $table->foreignId('driver_id')->constrained();
+                $table->decimal('amount', 10, 2);
+                $table->string('receipt')->nullable();
+                $table->text('notes')->nullable();
+                $table->foreignId('paid_by')->nullable()->constrained('users')->nullOnDelete();
+                $table->timestamp('paid_at');
+                $table->timestamps();
 
-            $table->index(['driver_id', 'paid_at']);
-        });
+                $table->index(['driver_id', 'paid_at']);
+            });
+        }
 
+        if (! Schema::hasColumn('driver_settlements', 'delivery_fee')) {
+            Schema::table('driver_settlements', function (Blueprint $table) {
+                $table->decimal('delivery_fee', 10, 2)->default(0)->after('order_total');
+            });
+        }
+
+        if (! Schema::hasColumn('driver_settlements', 'payout_id')) {
+            Schema::table('driver_settlements', function (Blueprint $table) {
+                $table->foreignId('payout_id')->nullable()->after('shift_id')
+                    ->constrained('driver_payouts')->nullOnDelete();
+            });
+        }
+
+        // Idempotent by nature: making a column nullable twice changes nothing.
         Schema::table('driver_settlements', function (Blueprint $table) {
-            $table->decimal('delivery_fee', 10, 2)->default(0)->after('order_total');
-            $table->foreignId('payout_id')->nullable()->after('shift_id')
-                ->constrained('driver_payouts')->nullOnDelete();
             $table->timestamp('delivered_at')->nullable()->change();
         });
 
-        Schema::table('change_refund_requests', function (Blueprint $table) {
-            $table->string('transfer_receipt')->nullable()->after('notes');
-        });
+        if (! Schema::hasColumn('change_refund_requests', 'transfer_receipt')) {
+            Schema::table('change_refund_requests', function (Blueprint $table) {
+                $table->string('transfer_receipt')->nullable()->after('notes');
+            });
+        }
 
-        Schema::table('cashier_shifts', function (Blueprint $table) {
-            $table->json('summary')->nullable()->after('totals');
-        });
+        if (! Schema::hasColumn('cashier_shifts', 'summary')) {
+            Schema::table('cashier_shifts', function (Blueprint $table) {
+                $table->json('summary')->nullable()->after('totals');
+            });
+        }
     }
 
     public function down(): void
