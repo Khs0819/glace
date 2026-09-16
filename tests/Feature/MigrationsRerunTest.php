@@ -32,6 +32,7 @@ it('can run each recent migration again on a database that already has it', func
     '2026_09_15_100001_cashier_board_upgrades.php',
     '2026_09_15_100002_add_captain_note_to_orders.php',
     '2026_09_15_100003_add_sender_account_name.php',
+    '2026_09_16_100001_add_account_number_to_payment_accounts.php',
 ]);
 
 it('finishes the roles migration when it had stopped after adding the role column', function () {
@@ -52,4 +53,24 @@ it('does not reopen a store the dashboard closed when the migration runs again',
     runMigration('2026_09_13_200001_add_roles_and_store_settings.php');
 
     expect(DB::table('store_settings')->where('key', 'store_open')->value('value'))->toBe('0');
+});
+
+it('adds account_number where the roles migration ran before the column existed', function () {
+    // Production: 2026_09_13_200001 was recorded as run from a version without
+    // the column, and Laravel never runs a recorded migration again.
+    Schema::table('payment_accounts', fn (Blueprint $table) => $table->dropColumn('account_number'));
+
+    runMigration('2026_09_16_100001_add_account_number_to_payment_accounts.php');
+
+    expect(Schema::hasColumn('payment_accounts', 'account_number'))->toBeTrue();
+});
+
+it('reports a column the code writes but the database lacks', function () {
+    $this->artisan('schema:check')->assertSuccessful();
+
+    Schema::table('payment_accounts', fn (Blueprint $table) => $table->dropColumn('account_number'));
+
+    $this->artisan('schema:check')
+        ->expectsOutputToContain('account_number')
+        ->assertExitCode(1);
 });
