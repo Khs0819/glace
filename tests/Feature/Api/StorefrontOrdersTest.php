@@ -830,3 +830,30 @@ it('refuses a PalPay order sent as "paypal" without the sender name', function (
         ->assertStatus(422)
         ->assertJsonValidationErrors('senderAccountName');
 });
+
+// ─── opening hours ──────────────────────────────────────────────────────────
+
+it('refuses an order while the shop is closed', function () {
+    app(App\Services\Storefront\StoreHours::class)->setOverride('store', 'closed', null);
+
+    test()->post('/api/orders', storefrontPayload(), $this->headers)
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('store');
+
+    expect(Order::count())->toBe(0);
+});
+
+it('refuses a delivery outside delivery hours but still takes a pickup', function () {
+    app(App\Services\Storefront\StoreHours::class)->setOverride('delivery', 'closed', null);
+
+    test()->post('/api/orders', storefrontPayload([
+        'deliveryMethod' => 'delivery',
+        'paymentMethod'  => 'jawwal-manual',
+        'receiptNote'    => 'حوّلت',
+        'addressId'      => $this->address->id,
+    ]), $this->headers)
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('deliveryMethod');
+
+    test()->post('/api/orders', storefrontPayload(), $this->headers)->assertCreated();
+});

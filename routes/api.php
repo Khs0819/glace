@@ -25,15 +25,8 @@ use Illuminate\Support\Facades\Route;
 // Home page aggregate
 Route::get('/home', HomeController::class);
 
-// Store status (open/closed, delivery available)
-Route::get('/store/status', function () {
-    return response()->json([
-        'storeOpen'          => \App\Models\StoreSetting::isStoreOpen(),
-        'deliveryOpen'       => \App\Models\StoreSetting::isDeliveryOpen(),
-        'closedMessage'      => \App\Models\StoreSetting::closedMessage(),
-        'autoConfirmMinutes' => \App\Models\StoreSetting::autoConfirmMinutes(),
-    ]);
-});
+// Store status: open now, when that changes, and the weekly hours.
+Route::get('/store/status', \App\Http\Controllers\Api\StoreStatusController::class);
 
 // Events
 Route::get('/events', [EventController::class, 'index']);

@@ -49,14 +49,16 @@ class StoreSetting extends Model
 
     // ── Convenience ──────────────────────────────────────────────────────
 
+    /** Open right now: the weekly hours, or a manager's override. */
     public static function isStoreOpen(): bool
     {
-        return static::getBool('store_open');
+        return app(\App\Services\Storefront\StoreHours::class)->isStoreOpen();
     }
 
+    /** Delivery open right now — never while the shop itself is closed. */
     public static function isDeliveryOpen(): bool
     {
-        return static::getBool('delivery_open');
+        return app(\App\Services\Storefront\StoreHours::class)->isDeliveryOpen();
     }
 
     public static function autoConfirmMinutes(): int
@@ -66,6 +68,12 @@ class StoreSetting extends Model
 
     public static function closedMessage(): string
     {
-        return static::get('closed_message', 'المتجر مغلق حالياً');
+        return static::get('closed_message', 'المتجر مغلق حالياً') ?: 'المتجر مغلق حالياً';
+    }
+
+    public static function deliveryClosedMessage(): string
+    {
+        return static::get('delivery_closed_message', 'التوصيل غير متاح حالياً — يمكنك الاستلام من المحل')
+            ?: 'التوصيل غير متاح حالياً — يمكنك الاستلام من المحل';
     }
 }

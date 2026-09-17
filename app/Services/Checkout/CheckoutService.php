@@ -44,7 +44,7 @@ class CheckoutService
             && ! \App\Models\StoreSetting::isDeliveryOpen()
         ) {
             throw ValidationException::withMessages([
-                'delivery_method' => 'التوصيل غير متاح حالياً — يمكنك الاستلام من المحل',
+                'delivery_method' => \App\Models\StoreSetting::deliveryClosedMessage(),
             ]);
         }
 

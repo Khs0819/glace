@@ -139,4 +139,17 @@ return [
         'auto_print'     => (bool) env('GLACE_CASHIER_AUTOPRINT', false),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Opening hours timezone
+    |--------------------------------------------------------------------------
+    |
+    | Opening hours are read in the shop's local time. The application itself
+    | runs in UTC, and comparing hours against UTC would open and close the
+    | shop two or three hours off.
+    |
+    */
+
+    'timezone' => env('GLACE_TIMEZONE', 'Asia/Gaza'),
+
 ];

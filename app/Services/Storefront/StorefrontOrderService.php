@@ -8,6 +8,7 @@ use App\Models\Coupon;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\PaymentAccount;
+use App\Models\StoreSetting;
 use App\Models\OtpCode;
 use App\Services\Auth\OtpService;
 use App\Services\Checkout\CartItemNormalizer;
@@ -58,6 +59,18 @@ class StorefrontOrderService
     {
         $deliveryMethod = $payload['deliveryMethod'];
         $paymentMethod  = $payload['paymentMethod'];
+
+        // 0 ── the shop's hours. This is the storefront's order path; the old
+        //      open/closed switch only ever guarded the legacy checkout.
+        $hours = app(StoreHours::class);
+
+        if (! $hours->isStoreOpen()) {
+            throw ValidationException::withMessages(['store' => StoreSetting::closedMessage()]);
+        }
+
+        if ($deliveryMethod === 'delivery' && ! $hours->isDeliveryOpen()) {
+            throw ValidationException::withMessages(['deliveryMethod' => StoreSetting::deliveryClosedMessage()]);
+        }
 
         // 1 ── price the cart from the catalog, ignoring every number sent.
         $cart = $this->pricer->price(CartItemNormalizer::normalize($payload['items']));
