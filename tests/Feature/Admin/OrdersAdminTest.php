@@ -4,7 +4,7 @@ use App\Filament\Resources\OrderResource;
 use App\Filament\Resources\OrderResource\Pages\ListOrders;
 use App\Filament\Resources\OrderResource\Pages\ViewOrder;
 use App\Filament\Resources\OrderResource\RelationManagers\PaymentsRelationManager;
-use App\Filament\Widgets\JawwalPayStatusWidget;
+use App\Filament\Widgets\FinanceStatsWidget;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
@@ -246,10 +246,10 @@ it('offers neither recovery action once a payment is settled', function () {
 // ─── gateway status ─────────────────────────────────────────────────────────
 
 it('reports the gateway as unconfigured rather than breaking the dashboard', function () {
-    config(['services.jawwalpay' => ['base_url' => 'https://apitest.jawwalpay.ps']]);
+    config(['services.jawwalpay' => ['enabled' => true, 'base_url' => 'https://apitest.jawwalpay.ps']]);
     app()->forgetInstance(App\Services\JawwalPay\JawwalPayClient::class);
 
-    Livewire::test(JawwalPayStatusWidget::class)
+    Livewire::test(FinanceStatsWidget::class)
         ->assertOk()
         ->assertSee('غير مُعدّة');
 });
@@ -259,12 +259,14 @@ it('keeps the dashboard up when the gateway is unreachable', function () {
         JAWWAL_BASE . '/v1/get_balance' => fn () => throw new Illuminate\Http\Client\ConnectionException('down'),
     ]);
 
-    Livewire::test(JawwalPayStatusWidget::class)
+    config(['services.jawwalpay.enabled' => true]);
+
+    Livewire::test(FinanceStatsWidget::class)
         ->assertOk()
         ->assertSee('غير متاحة');
 });
 
-it('shows the wallet balance and says which environment it came from', function () {
+it('warns when the gateway is still pointed at the test server', function () {
     fakeJawwalPay([
         JAWWAL_BASE . '/v1/get_balance' => Http::response(jawwalEnvelope('00', [
             ['key' => 'info', 'value' => json_encode([
@@ -273,10 +275,41 @@ it('shows the wallet balance and says which environment it came from', function 
         ])),
     ]);
 
-    adminOrder(Order::STATUS_PAID, 42)->update(['paid_at' => now()]);
+    config(['services.jawwalpay.enabled' => true]);
 
-    Livewire::test(JawwalPayStatusWidget::class)
+    // A shop taking orders against the test host is charging nobody.
+    Livewire::test(FinanceStatsWidget::class)
         ->assertOk()
-        ->assertSee('835.20 ₪')
-        ->assertSee('بيئة اختبار');
+        ->assertSee('خادم التجربة')
+        ->assertSee('لا تُخصم مبالغ حقيقية');
+});
+
+it('says the gateway is off rather than calling it', function () {
+    config(['services.jawwalpay.enabled' => false]);
+
+    Livewire::test(FinanceStatsWidget::class)->assertOk()->assertSee('مُطفأة');
+});
+
+it('totals the customers wallets, not the merchant account at the gateway', function () {
+    $customer = App\Models\Customer::create(['name' => 'أحمد', 'phone' => '0599123456']);
+    $other    = App\Models\Customer::create(['name' => 'سارة', 'phone' => '0598000000']);
+
+    app(App\Services\Storefront\WalletService::class)->credit($customer, 12050, 'شحن');
+    app(App\Services\Storefront\WalletService::class)->credit($other, 4950, 'شحن');
+
+    Livewire::test(FinanceStatsWidget::class)
+        ->assertOk()
+        ->assertSee('170.00 ₪')
+        ->assertSee('2 محفظة بها رصيد');
+});
+
+it('counts today sales by what was paid, not by the fulfilment stage', function () {
+    // The tile compared the fulfilment column against "paid" and so read
+    // 0.00 ₪ however many orders had been paid for.
+    adminOrder(Order::STATUS_PAID, 42)->update(['paid_at' => now(), 'status' => Order::FULFILMENT_READY]);
+
+    Livewire::test(FinanceStatsWidget::class)
+        ->assertOk()
+        ->assertSee('42.00 ₪')
+        ->assertSee('1 طلب مدفوع');
 });
