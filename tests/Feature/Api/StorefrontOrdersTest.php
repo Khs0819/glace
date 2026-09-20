@@ -408,6 +408,8 @@ it('rate-limits jawwal codes to one number', function () {
 });
 
 it('refuses a jawwal order with a wrong code and creates nothing', function () {
+    App\Models\PaymentAccount::where('method', 'jawwal')->update(['active' => true]);
+
     test()->postJson('/api/orders/jawwal/send-code', ['phone' => '0599123456', 'amount' => 24])->assertOk();
 
     test()->post('/api/orders', storefrontPayload([
@@ -420,6 +422,8 @@ it('refuses a jawwal order with a wrong code and creates nothing', function () {
 });
 
 it('refuses a jawwal code approved for a different amount', function () {
+    App\Models\PaymentAccount::where('method', 'jawwal')->update(['active' => true]);
+
     // The customer approved 99 ₪; the cart is 24 ₪. They must approve again.
     app(App\Services\Auth\OtpService::class)->send(
         '0599123456',

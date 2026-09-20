@@ -10,6 +10,12 @@ use App\Models\Order;
 use App\Models\PaymentAccount;
 use App\Models\StoreSetting;
 use App\Models\OtpCode;
+use App\Models\Payment;
+use App\Services\Checkout\OrderPaymentService;
+use App\Services\JawwalPay\ErrorCode;
+use App\Services\JawwalPay\JawwalPayClient;
+use App\Services\JawwalPay\JawwalPayException;
+use App\Services\JawwalPay\MobileNumber;
 use App\Services\Auth\OtpService;
 use App\Services\Checkout\CartItemNormalizer;
 use App\Services\Checkout\CartPricer;
@@ -17,6 +23,7 @@ use App\Services\Checkout\Money;
 use App\Services\Checkout\PricedCart;
 use App\Support\PhoneNumber;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
@@ -72,6 +79,15 @@ class StorefrontOrderService
             throw ValidationException::withMessages(['deliveryMethod' => StoreSetting::deliveryClosedMessage()]);
         }
 
+        // Switching a payment method off in the dashboard hides it from the
+        // storefront; this is what stops an order arriving on it anyway, from
+        // a stale page or a client that never asked.
+        if (! PaymentAccount::methodEnabled($paymentMethod)) {
+            throw ValidationException::withMessages([
+                'paymentMethod' => 'طريقة الدفع غير متاحة حالياً',
+            ]);
+        }
+
         // 1 ── price the cart from the catalog, ignoring every number sent.
         $cart = $this->pricer->price(CartItemNormalizer::normalize($payload['items']));
 
@@ -113,7 +129,7 @@ class StorefrontOrderService
         // 9 ── which of the shop's accounts the transfer went to.
         $account = $this->resolvePaymentAccount($payload, $paymentMethod);
 
-        return DB::transaction(function () use (
+        $order = DB::transaction(function () use (
             $payload, $customer, $cart, $address, $coupon, $discount,
             $deliveryFee, $subtotal, $total, $paymentMethod, $deliveryMethod, $receiptPath, $tendered, $account
         ) {
@@ -202,6 +218,20 @@ class StorefrontOrderService
 
             return $order->load('items');
         });
+
+        /*
+         * The charge comes after the order is committed, not before.
+         *
+         * Either order of the two can go wrong, and this is the recoverable
+         * one: a committed order whose charge failed is visible to the shop
+         * and can be cancelled or paid at the counter. Charging first and
+         * failing to write would be money taken with no order to point at.
+         */
+        if ($paymentMethod === 'jawwal' && $this->jawwalGatewayLive()) {
+            $this->chargeJawwal($order, $payload);
+        }
+
+        return $order;
     }
 
     /**
@@ -213,9 +243,51 @@ class StorefrontOrderService
      */
     public function sendJawwalCode(string $phone, float $amount): void
     {
-        $this->otp->send($phone, OtpCode::PURPOSE_JAWWAL, [
+        // Gateway off: the old behaviour, where we text our own code and the
+        // order is settled at the counter. Nothing is charged either way.
+        if (! $this->jawwalGatewayLive()) {
+            $this->otp->send($phone, OtpCode::PURPOSE_JAWWAL, [
+                'amount' => Money::toAgorot($amount),
+            ]);
+
+            return;
+        }
+
+        $wallet = MobileNumber::normalize($phone);
+
+        if ($wallet === null) {
+            throw ValidationException::withMessages([
+                'phone' => 'رقم محفظة جوال باي غير صالح — مثال: 0599002286',
+            ]);
+        }
+
+        $msgId = JawwalPayClient::newMessageId();
+
+        try {
+            $response = app(JawwalPayClient::class)->sendOtp($wallet, $amount, $msgId);
+        } catch (JawwalPayException $e) {
+            report($e);
+
+            throw ValidationException::withMessages([
+                'phone' => 'تعذّر الاتصال بجوال باي — حاول بعد قليل',
+            ])->status(503);
+        }
+
+        if ($response->failed()) {
+            throw ValidationException::withMessages([
+                'phone' => ErrorCode::customerMessage($response->errorCode()),
+            ]);
+        }
+
+        /*
+         * What the code was sent for, so the charge cannot be for something
+         * else. The customer approved one amount in the message they were
+         * texted; a cart edited in another tab must not ride on it.
+         */
+        Cache::put($this->jawwalIntentKey($wallet), [
+            'msgId'  => $msgId,
             'amount' => Money::toAgorot($amount),
-        ]);
+        ], now()->addMinutes(10));
     }
 
     // ─── pieces ─────────────────────────────────────────────────────────────
@@ -334,6 +406,19 @@ class StorefrontOrderService
             ]);
         }
 
+        /*
+         * With the gateway live the code is Jawwal Pay's, not ours: only they
+         * can tell whether it is right, and they do that by accepting or
+         * refusing the charge. What is checked here is that a code was asked
+         * for at all, and for this exact amount — everything that can be known
+         * before an order is written.
+         */
+        if ($this->jawwalGatewayLive()) {
+            $this->assertJawwalIntent($payload, $total);
+
+            return;
+        }
+
         $record = $this->otp->verify(
             $payload['jawwalPhone'],
             $payload['jawwalCode'],
@@ -350,6 +435,95 @@ class StorefrontOrderService
                 'jawwalCode' => 'تغيّرت قيمة الطلب — يرجى طلب رمز تأكيد جديد',
             ]);
         }
+    }
+
+    /** Configured, switched on, and therefore able to move real money. */
+    private function jawwalGatewayLive(): bool
+    {
+        return (bool) config('services.jawwalpay.enabled')
+            && app(JawwalPayClient::class)->configured();
+    }
+
+    private function jawwalIntentKey(string $wallet): string
+    {
+        return 'jawwal-otp:' . $wallet;
+    }
+
+    /**
+     * That a code was requested for this wallet, and for this total.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function assertJawwalIntent(array $payload, int $total): void
+    {
+        $wallet = MobileNumber::normalize($payload['jawwalPhone']);
+        $intent = $wallet === null ? null : Cache::get($this->jawwalIntentKey($wallet));
+
+        if ($intent === null) {
+            throw ValidationException::withMessages([
+                'jawwalCode' => 'اطلب رمز التأكيد أولاً',
+            ]);
+        }
+
+        if ((int) $intent['amount'] !== $total) {
+            throw ValidationException::withMessages([
+                'jawwalCode' => 'تغيّرت قيمة الطلب — يرجى طلب رمز تأكيد جديد',
+            ]);
+        }
+    }
+
+    /**
+     * Charge the customer's Jawwal Pay wallet for an order that now exists.
+     *
+     * The attempt is written as a Payment row first — the same row the
+     * dashboard reads — so a charge that goes out is on record before the
+     * answer comes back, whatever the answer turns out to be.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function chargeJawwal(Order $order, array $payload): void
+    {
+        $wallet = MobileNumber::normalize($payload['jawwalPhone']);
+        $intent = Cache::pull($this->jawwalIntentKey((string) $wallet)) ?? [];
+
+        $order->payments()->create([
+            'provider'    => 'jawwalpay',
+            'method'      => 'otp',
+            'otp_msg_id'  => $intent['msgId'] ?? JawwalPayClient::newMessageId(),
+            'wallet'      => $wallet,
+            'amount'      => $order->total,
+            'status'      => Payment::STATUS_OTP_SENT,
+            'otp_sent_at' => now(),
+        ]);
+
+        try {
+            $payment = app(OrderPaymentService::class)->confirm($order, (string) $payload['jawwalCode']);
+        } catch (JawwalPayException $e) {
+            // We asked for the money and never heard back. The order stays,
+            // flagged as unresolved, and nobody charges again until a human has
+            // checked the provider's records.
+            report($e);
+
+            throw ValidationException::withMessages([
+                'jawwalCode' => 'لم يصلنا ردّ من جوال باي — تواصل مع المحل قبل إعادة المحاولة',
+            ])->status(409);
+        }
+
+        if ($payment->isPaid()) {
+            return;
+        }
+
+        // A refused charge leaves an order nobody is preparing: cancel it here
+        // rather than let it reach the counter as if it were paid for.
+        $order->update([
+            'status'        => Order::FULFILMENT_CANCELLED,
+            'cancel_reason' => 'فشل الدفع عبر جوال باي',
+            'cancelled_at'  => now(),
+        ]);
+
+        throw ValidationException::withMessages([
+            'jawwalCode' => ErrorCode::customerMessage($payment->error_code),
+        ]);
     }
 
     private function payFromWallet(Order $order, ?Customer $customer, int $total): void
@@ -432,6 +606,16 @@ class StorefrontOrderService
         if (! $customer) {
             throw ValidationException::withMessages([
                 'paidAmount' => 'لإضافة الباقي إلى المحفظة يجب تسجيل الدخول',
+            ]);
+        }
+
+        // A ceiling on the change, not on the order: the shop does not hand
+        // back — or bank into a wallet — more than this out of one cash sale.
+        $maxChange = Money::toAgorot((float) config('storefront.limits.max_change', 199));
+
+        if ($tendered - $total > $maxChange) {
+            throw ValidationException::withMessages([
+                'paidAmount' => 'الحد الأقصى للباقي هو ' . Money::toDecimal($maxChange) . ' ₪',
             ]);
         }
 

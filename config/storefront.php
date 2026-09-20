@@ -141,6 +141,29 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Money ceilings
+    |--------------------------------------------------------------------------
+    |
+    | Two limits the shop asked for at launch, both about money leaving rather
+    | than money arriving:
+    |
+    |   max_change — the most change a cash payment may produce, whether it
+    |   goes to the customer's wallet or back as a transfer. A cashier typing
+    |   500 against a 36 shekel order is a typo, not a banknote.
+    |
+    |   max_topup — the most one top-up request may ask for. A request is only
+    |   ever credited after a human matches it to a transfer, but the ceiling
+    |   keeps a mistyped one from reaching that desk at all.
+    |
+    */
+
+    'limits' => [
+        'max_change' => (float) env('GLACE_MAX_CHANGE', 199),
+        'max_topup'  => (float) env('GLACE_MAX_TOPUP', 500),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Opening hours timezone
     |--------------------------------------------------------------------------
     |

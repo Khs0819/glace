@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\PaymentAccount;
 use App\Models\StoreSetting;
 use App\Services\Storefront\StoreHours;
 use Illuminate\Http\JsonResponse;
@@ -27,6 +28,10 @@ class StoreStatusController extends Controller
             'closedMessage'         => StoreSetting::closedMessage(),
             'deliveryClosedMessage' => StoreSetting::deliveryClosedMessage(),
             'autoConfirmMinutes'    => StoreSetting::autoConfirmMinutes(),
+
+            // Which payment options to show. A method switched off in the
+            // dashboard is false here and is refused by POST /orders.
+            'paymentMethods' => PaymentAccount::enabledMethods(),
 
             'timezone'   => $hours->timezone(),
             'serverTime' => $hours->now()->toIso8601String(),

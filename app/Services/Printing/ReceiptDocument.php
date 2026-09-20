@@ -80,6 +80,112 @@ class ReceiptDocument
         return null;
     }
 
+    /**
+     * The shop and what kind of order this is, on one line.
+     *
+     * Paper costs money in Gaza, and these were two lines saying one thing
+     * each. The name goes light and the kind bold: the kind is what somebody
+     * sorting a stack of dockets is actually looking for.
+     *
+     * @return array{0: string, 1: string} right, left
+     */
+    public function titleLine(): array
+    {
+        $kind = $this->kind();
+
+        if ($destination = $this->destination()) {
+            $kind = trim($kind . ' · ' . $destination);
+        }
+
+        return [$this->shopName(), $kind];
+    }
+
+    /** Address, phone and tax number on one line, or null when there are none. */
+    public function contactLine(): ?string
+    {
+        $lines = $this->shopLines();
+
+        return $lines === [] ? null : implode(' · ', $lines);
+    }
+
+    /**
+     * The header as paired facts, two to a line.
+     *
+     * The labels are gone with the line breaks: "ORD-EFQ2AM" and "18/09 21:40"
+     * need no telling apart, and a slip is read by someone who knows what a
+     * receipt says.
+     *
+     * @return array<int, array{0: string, 1: string}>
+     */
+    public function headerRows(): array
+    {
+        $order = $this->order;
+
+        $facts = array_values(array_filter([
+            $order->reference,
+            $order->created_at?->format('d/m H:i'),
+            $order->customer_name ?: null,
+            $order->customer_phone ?: null,
+            $order->isDineIn() && $order->table_number !== null ? 'طاولة ' . $order->table_number : null,
+            $order->paidBy?->name ? 'كاشير: ' . $order->paidBy->name : null,
+        ], static fn ($value) => $value !== null && $value !== ''));
+
+        return array_map(
+            static fn (array $pair) => [$pair[0], $pair[1] ?? ''],
+            array_chunk($facts, 2),
+        );
+    }
+
+    /**
+     * One item on one line: how many, of what, and at what each.
+     *
+     * The unit price used to sit on a line of its own under the name, which
+     * doubled the length of the item block.
+     *
+     * @param  array{name: string, qty: int, unit: float, total: float}  $item
+     */
+    public function itemLabel(array $item): string
+    {
+        $label = $item['qty'] . ' × ' . $item['name'];
+
+        // On a line of one the unit price is the line total, printed twice.
+        return $item['qty'] > 1
+            ? $label . ' (' . $item['qty'] . ' × ' . number_format($item['unit'], 2) . ')'
+            : $label;
+    }
+
+    /**
+     * Subtotal, discount and delivery on one line.
+     *
+     * Short labels, because the whole point is that the three fit on a single
+     * line: "رسوم التوصيل" spelled out pushes the figure onto a second one and
+     * costs the line this merge was meant to save.
+     */
+    public function totalsLine(): ?string
+    {
+        $short = [
+            'المجموع'      => 'مجموع',
+            'الخصم'        => 'خصم',
+            'رسوم التوصيل' => 'توصيل',
+        ];
+
+        $parts = [];
+
+        foreach ($this->totals() as $label => $amount) {
+            $parts[] = ($short[$label] ?? $label) . ' ' . number_format($amount, 2);
+        }
+
+        return $parts === [] ? null : implode(' · ', $parts);
+    }
+
+    /** The whole delivery address on one line. */
+    public function addressLine(): ?string
+    {
+        $lines = $this->addressLines();
+
+        return $lines === [] ? null : implode(' · ', $lines);
+    }
+
     /** @return array<string, ?string> label => value, for the header block */
     public function header(): array
     {
@@ -235,67 +341,55 @@ class ReceiptDocument
          * roll for legibility nobody needed. The name and the kind still stand
          * out — weight does that as well as size, in half the space.
          */
-        $push($this->shopName(), ['align' => 'center', 'bold' => true]);
+        [$name, $kind] = $this->titleLine();
+        $push($this->columns($name, $kind, $width), ['bold' => true]);
 
-        foreach ($this->shopLines() as $line) {
-            $push($line, ['align' => 'center']);
+        if ($contact = $this->contactLine()) {
+            foreach ($this->wrap($contact, $width) as $line) {
+                $push($line, ['align' => 'center']);
+            }
         }
 
         $rule();
 
-        $push($this->kind(), ['align' => 'center', 'bold' => true]);
-
-        if ($destination = $this->destination()) {
-            $push($destination, ['align' => 'center', 'bold' => true]);
-        }
-
-        $rule();
-
-        foreach ($this->header() as $label => $value) {
-            $push($this->columns($label, (string) $value, $width));
+        foreach ($this->headerRows() as [$right, $left]) {
+            $push($this->columns($right, $left, $width));
         }
 
         $rule();
 
         foreach ($this->items() as $item) {
             $push(
-                $this->columns(
-                    $item['qty'] . ' × ' . $item['name'],
-                    number_format($item['total'], 2),
-                    $width,
-                ),
+                $this->columns($this->itemLabel($item), number_format($item['total'], 2), $width),
                 ['bold' => true],
             );
 
-            // The arithmetic, on its own line and unbolded: a line of three
-            // cannot be checked against the menu without the unit price, and
-            // putting it beside the name crowds the name off narrow paper.
-            if ($item['qty'] > 1) {
-                $push($this->columns(
-                    '',
-                    $item['qty'] . ' × ' . number_format($item['unit'], 2),
-                    $width,
-                ));
-            }
-
             foreach ($item['notes'] as $note) {
                 // Indented so the extras read as belonging to the line above.
-                $push('   ' . $note);
+                foreach ($this->wrap('   ' . $note, $width) as $line) {
+                    $push($line);
+                }
             }
         }
 
         $rule();
 
-        foreach ($this->totals() as $label => $amount) {
-            $push($this->columns($label, number_format($amount, 2), $width));
+        if ($totals = $this->totalsLine()) {
+            foreach ($this->wrap($totals, $width) as $line) {
+                $push($line);
+            }
         }
 
+        // The total shares its line with how it was paid: the two are read
+        // together and neither needs a line to itself.
         $push(
-            $this->columns('الإجمالي', number_format($this->total(), 2) . ' ₪', $width),
+            $this->columns(
+                'الإجمالي ' . number_format($this->total(), 2) . ' ₪',
+                $this->paymentLabel(),
+                $width,
+            ),
             ['bold' => true],
         );
-
-        $push($this->columns('الدفع', $this->paymentLabel(), $width));
 
         foreach ($this->tenderLines() as $label => $value) {
             $push($this->columns($label, $value, $width));
@@ -306,31 +400,29 @@ class ReceiptDocument
             $push('*** لا تُعِد باقياً نقداً ***', ['align' => 'center', 'bold' => true]);
         }
 
-        // The driver takes the box the "غير مدفوع" banner used to have. On a
-        // delivery slip the useful thing to see at a glance is who is carrying
-        // it, not a payment state the slip is no longer printed in.
+        // The driver keeps a line of his own on a delivery slip — it is the one
+        // thing somebody handing over a bag has to check — but not a box.
         if ($driver = $this->driverLine()) {
-            $rule();
             $push('السائق: ' . $driver, ['align' => 'center', 'bold' => true]);
         }
 
-        if ($lines = $this->addressLines()) {
-            $rule();
-            $push('عنوان التوصيل', ['bold' => true]);
-
-            foreach ($lines as $line) {
+        if ($address = $this->addressLine()) {
+            foreach ($this->wrap('العنوان: ' . $address, $width) as $line) {
                 $push($line);
             }
         }
 
         if (filled($this->order->notes)) {
-            $rule();
-            $push('ملاحظة الطلب: ' . $this->order->notes, ['bold' => true]);
+            foreach ($this->wrap('ملاحظة: ' . $this->order->notes, $width) as $line) {
+                $push($line, ['bold' => true]);
+            }
         }
 
         // Only on a delivery slip: it is instructions for the person at the door.
         if ($this->order->delivery_method === 'delivery' && filled($this->order->captain_note)) {
-            $push('ملاحظة للكابتن: ' . $this->order->captain_note);
+            foreach ($this->wrap('للكابتن: ' . $this->order->captain_note, $width) as $line) {
+                $push($line);
+            }
         }
 
         $rule();
@@ -347,10 +439,61 @@ class ReceiptDocument
      */
     private function columns(string $left, string $right, int $width): string
     {
+        // The right-hand value is the number being checked and is never cut;
+        // a label too long for what is left of the line is.
+        $room = $width - mb_strlen($right) - 1;
+
+        if ($room > 0 && mb_strlen($left) > $room) {
+            $left = rtrim(mb_substr($left, 0, $room));
+        }
+
         $gap = $width - mb_strlen($left) - mb_strlen($right);
 
         return $gap < 1
             ? $left . ' ' . $right
             : $left . str_repeat(' ', $gap) . $right;
+    }
+
+    /**
+     * Break a run of text into lines the roll can hold, on word boundaries.
+     *
+     * @return array<int, string>
+     */
+    private function wrap(string $text, int $width): array
+    {
+        if (mb_strlen($text) <= $width) {
+            return [$text];
+        }
+
+        $lines = [];
+        $line  = '';
+
+        foreach (explode(' ', $text) as $word) {
+            $candidate = $line === '' ? $word : $line . ' ' . $word;
+
+            if (mb_strlen($candidate) <= $width) {
+                $line = $candidate;
+
+                continue;
+            }
+
+            if ($line !== '') {
+                $lines[] = $line;
+            }
+
+            // A single word longer than the roll is cut rather than lost.
+            while (mb_strlen($word) > $width) {
+                $lines[] = mb_substr($word, 0, $width);
+                $word    = mb_substr($word, $width);
+            }
+
+            $line = $word;
+        }
+
+        if ($line !== '') {
+            $lines[] = $line;
+        }
+
+        return $lines;
     }
 }

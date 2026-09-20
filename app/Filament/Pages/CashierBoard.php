@@ -587,6 +587,19 @@ class CashierBoard extends Page
             return;
         }
 
+        $maxChange = (float) config('storefront.limits.max_change', 199);
+
+        if ($amount > $maxChange) {
+            Notification::make()
+                ->title('المبلغ أكبر من الحد الأقصى للاسترداد')
+                ->body("الحد الأقصى {$maxChange} ₪، والمبلغ المحسوب {$amount} ₪. راجع المبلغ المستلم أولاً.")
+                ->danger()
+                ->persistent()
+                ->send();
+
+            return;
+        }
+
         ChangeRefundRequest::create([
             'order_id'        => $order->getKey(),
             'order_reference' => $order->reference,
@@ -712,6 +725,19 @@ class CashierBoard extends Page
 
         if ($tendered < $order->total) {
             Notification::make()->title('المبلغ المستلم أقل من إجمالي الطلب')->danger()->send();
+
+            return;
+        }
+
+        $maxChange = (float) config('storefront.limits.max_change', 199);
+
+        if ($tendered - (float) $order->total > $maxChange) {
+            Notification::make()
+                ->title('الباقي أكبر من الحد الأقصى')
+                ->body("الحد الأقصى للباقي {$maxChange} ₪. تأكد من المبلغ المستلم.")
+                ->danger()
+                ->persistent()
+                ->send();
 
             return;
         }

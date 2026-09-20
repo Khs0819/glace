@@ -85,6 +85,8 @@ class StorefrontOrderController extends Controller
 
         $this->orders->sendJawwalCode($data['phone'], (float) $data['amount']);
 
+        // The code itself is Jawwal Pay's when the gateway is live, and ours
+        // when it is not; either way the storefront's next call is POST /orders.
         return response()->json(['sent' => true]);
     }
 

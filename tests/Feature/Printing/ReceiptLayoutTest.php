@@ -42,10 +42,11 @@ function slip(Order $order, int $width = 42): string
     return implode(PHP_EOL, array_column((new ReceiptDocument($order))->lines($width), 'text'));
 }
 
-it('shows the unit price on a line of more than one', function () {
+it('shows the unit price on the item line, not under it', function () {
     // Three cups at ten: without the unit price the only way to check the
-    // line against the menu is to divide.
-    expect(slip(layoutOrder()))->toContain('3 × 10.00');
+    // line against the menu is to divide — but a second line per item is a
+    // second line of roll, so it goes beside the name.
+    expect(slip(layoutOrder()))->toContain('(3 × 10.00)');
 });
 
 it('does not clutter a single-item line with its own unit price', function () {
@@ -53,7 +54,35 @@ it('does not clutter a single-item line with its own unit price', function () {
 });
 
 it('prints the delivery fee on a delivery', function () {
-    expect(slip(layoutOrder()))->toContain('رسوم التوصيل');
+    expect(slip(layoutOrder()))->toContain('توصيل 10.00');
+});
+
+it('puts the shop and the kind of order on one line', function () {
+    // Paper costs money: the name, the kind and the area were four lines.
+    $first = (new ReceiptDocument(layoutOrder(), ['name' => 'جلاسيه الأمير']))->lines(42)[0]['text'];
+
+    expect($first)->toContain('جلاسيه الأمير')->toContain('توصيل');
+});
+
+it('puts the total and how it was paid on one line', function () {
+    $slip = slip(layoutOrder());
+
+    expect($slip)->toContain('الإجمالي 43.00 ₪')->toContain('بنك فلسطين');
+});
+
+it('runs the subtotal, discount and delivery together on one line', function () {
+    $lines = array_filter(
+        explode(PHP_EOL, slip(layoutOrder())),
+        fn (string $line) => str_contains($line, 'مجموع'),
+    );
+
+    expect($lines)->toHaveCount(1)
+        ->and(implode('', $lines))->toContain('خصم')->toContain('توصيل');
+});
+
+it('fits a whole order on fewer lines than it used to take', function () {
+    // The slip that came back from the shop ran to 30 lines for two items.
+    expect(count((new ReceiptDocument(layoutOrder()))->lines(42)))->toBeLessThanOrEqual(20);
 });
 
 it('no longer prints an unpaid banner', function () {
@@ -85,7 +114,13 @@ it('says nothing about a driver on an order that is not a delivery', function ()
 it('keeps every line inside the paper width', function () {
     // The slip that came back had its values cut off the edge, which is what
     // a line longer than the roll looks like.
-    foreach ((new ReceiptDocument(layoutOrder()))->lines(32) as $line) {
+    $order = layoutOrder([
+        'address'      => ['city' => 'غزة', 'area' => 'الرمال', 'street' => 'شارع الجلاء الطويل جداً', 'landmark' => 'بجانب صيدلية النور'],
+        'notes'        => 'بدون سكر ومن فضلكم ضعوا الملاعق والمناديل مع الطلب',
+        'captain_note' => 'الشقة في الطابق الرابع، الجرس معطل — اتصل عند الوصول',
+    ]);
+
+    foreach ((new ReceiptDocument($order, ['name' => 'جلاسيه الأمير', 'phone' => '0599000000']))->lines(32) as $line) {
         expect(mb_strlen($line['text']))->toBeLessThanOrEqual(32);
     }
 });

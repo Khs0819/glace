@@ -39,6 +39,39 @@ class PaymentAccount extends Model
         'cash'          => 'كاش (داخل المحل)',
     ];
 
+    /**
+     * Whether customers may pay with this method right now.
+     *
+     * The dashboard's «مفعّل» switch is the shop's way of taking a method off
+     * the storefront. A method with no account row at all has never been
+     * configured and stays available — that is how cash and card behaved
+     * before there was anything to switch.
+     */
+    public static function methodEnabled(string $method): bool
+    {
+        return static::enabledMethods()[$method] ?? true;
+    }
+
+    /**
+     * Every payment method the storefront can offer, and whether it is on.
+     *
+     * @return array<string, bool>
+     */
+    public static function enabledMethods(): array
+    {
+        $accounts = static::query()->pluck('active', 'method');
+
+        $methods = [];
+
+        foreach (Order::PAYMENT_METHODS as $method) {
+            // The wallet is not an account the shop is paid into, so it has no
+            // row and is always available to a signed-in customer.
+            $methods[$method] = $accounts->has($method) ? (bool) $accounts[$method] : true;
+        }
+
+        return $methods;
+    }
+
     /** Methods the customer transfers to; the rest are taken at the counter. */
     public function isTransferDestination(): bool
     {

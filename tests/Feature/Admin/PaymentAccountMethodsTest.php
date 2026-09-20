@@ -30,6 +30,10 @@ it('calls the Palestinian service by its own name', function () {
 });
 
 it('saves a counter method with no account number', function () {
+    // Every method ships with a row so the shop has a switch for it; this is
+    // about the form, so the seeded one is cleared out of the way first.
+    PaymentAccount::where('method', 'visa')->delete();
+
     Livewire::test(PaymentAccountResource\Pages\CreatePaymentAccount::class)
         ->fillForm([
             'method'      => 'visa',
@@ -57,6 +61,8 @@ it('still demands an account number for a real transfer destination', function (
 });
 
 it('knows which methods a customer actually transfers to', function () {
+    PaymentAccount::whereIn('method', ['bop', 'visa'])->delete();
+
     $bank = PaymentAccount::create([
         'method' => 'bop', 'holder_name' => 'x',
         'primary_label' => 'رقم الحساب', 'primary_value' => '123',

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Faq;
+use App\Models\Order;
 use App\Models\PaymentAccount;
 use App\Models\SiteContent;
 use Illuminate\Http\JsonResponse;
@@ -20,6 +21,13 @@ class ContentController extends Controller
     public function paymentAccounts(): JsonResponse
     {
         $accounts = PaymentAccount::where('active', true)
+            // Transfer destinations only. Cash, card and automatic Jawwal Pay
+            // have rows too — that is how the shop switches them on and off —
+            // but they are not accounts a customer sends money to, and a card
+            // reader listed beside a bank account is a customer looking for an
+            // account number that does not exist. Which methods are on is
+            // reported by GET /store/status as `paymentMethods`.
+            ->whereIn('method', Order::RECEIPT_METHODS)
             ->orderBy('sort_order')
             ->get()
             ->map(fn (PaymentAccount $account) => array_filter([

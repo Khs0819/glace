@@ -6,6 +6,10 @@
     would otherwise add, which on roll paper is the difference between a tidy
     docket and one wrapping onto a second sheet.
 
+    Paper is expensive, so the layout is built to be short: facts that belong
+    together share a line, and nothing is printed twice. The pairings come from
+    ReceiptDocument, so the printer path prints the same slip.
+
     Everything is greyscale and heavy-weight: thermal heads have no colour and
     lose thin strokes.
 --}}
@@ -44,61 +48,60 @@
     body {
         width: {{ $contentWidth }}mm;
         margin: 0 {{ $rightMargin }}mm 0 auto;
-        padding: 1mm 0 0;
+        padding: 0;
         /* A monospace stack keeps the two-column rows aligned; the Arabic
            faces are named first so they win for Arabic glyphs. */
         font-family: "Tahoma", "Arial", "Segoe UI", monospace;
         font-size: {{ $width >= 80 ? '12px' : '11px' }};
-        line-height: 1.45;
+        /* Tight, but not so tight that Arabic descenders touch: every tenth
+           here is millimetres of roll across a day of orders. */
+        line-height: 1.22;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
     }
 
     .center { text-align: center; }
     .bold   { font-weight: 700; }
+    .small  { font-size: 0.88em; }
 
-    /* Trimmed deliberately: every millimetre here is a millimetre of roll,
-       and the slip is read at arm's length on a counter, not across a room. */
-    .shop   { font-size: {{ $width >= 80 ? '15px' : '13px' }}; font-weight: 700; }
-    .kind   { font-size: {{ $width >= 80 ? '14px' : '12px' }}; font-weight: 700; }
-    .dest   { font-size: {{ $width >= 80 ? '13px' : '12px' }}; font-weight: 700; }
-    .item-unit { font-size: 0.85em; opacity: .75; }
+    .shop { font-size: {{ $width >= 80 ? '13px' : '12px' }}; font-weight: 400; }
+    .kind { font-size: {{ $width >= 80 ? '14px' : '12px' }}; font-weight: 700; }
 
     hr {
         border: 0;
         border-top: 1px dashed #000;
-        margin: 1.2mm 0;
+        margin: 0.8mm 0;
     }
 
     .row {
         display: flex;
         justify-content: space-between;
+        align-items: baseline;
         gap: 2mm;
     }
 
     /* The amount must never wrap or shrink — it is the number being checked. */
     .row .amount { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-    .item      { margin-top: 1mm; font-weight: 700; }
-    .item-note { padding-inline-start: 4mm; font-weight: 400; font-size: 0.9em; }
+    .item      { font-weight: 700; }
+    .item-note { padding-inline-start: 3mm; font-weight: 400; font-size: 0.88em; }
 
     .total {
-        font-size: {{ $width >= 80 ? '15px' : '13px' }};
+        font-size: {{ $width >= 80 ? '14px' : '12px' }};
         font-weight: 700;
         border-top: 2px solid #000;
-        padding-top: 1.5mm;
-        margin-top: 1.5mm;
+        padding-top: 0.8mm;
+        margin-top: 0.8mm;
     }
 
-    .driver-box {
-        margin-top: 2mm;
-        padding: 1.5mm;
+    /* A line, not a box: the driver still stands out, at a third of the paper. */
+    .driver {
+        margin-top: 0.8mm;
+        padding-top: 0.8mm;
+        border-top: 1px solid #000;
         text-align: center;
         font-weight: 700;
-        border: 2px solid #000;
     }
-
-    .footer { margin-top: 2mm; }
 
     /* Controls are for the screen only; they must never reach the paper. */
     .controls { margin: 4mm 0; text-align: center; }
@@ -112,38 +115,31 @@
 </head>
 <body>
 
-<div class="center shop">{{ $doc->shopName() }}</div>
-@foreach ($doc->shopLines() as $line)
-    <div class="center">{{ $line }}</div>
-@endforeach
+@php([$shopName, $kindLine] = $doc->titleLine())
 
-<hr>
+{{-- Shop on the right, kind of order on the left: one line instead of four. --}}
+<div class="row">
+    <span class="shop">{{ $shopName }}</span>
+    <span class="kind">{{ $kindLine }}</span>
+</div>
 
-<div class="center kind">{{ $doc->kind() }}</div>
-@if ($destination = $doc->destination())
-    <div class="center dest">{{ $destination }}</div>
+@if ($contact = $doc->contactLine())
+    <div class="center small">{{ $contact }}</div>
 @endif
 
 <hr>
 
-@foreach ($doc->header() as $label => $value)
-    <div class="row"><span>{{ $label }}</span><span class="bold">{{ $value }}</span></div>
+@foreach ($doc->headerRows() as [$right, $left])
+    <div class="row"><span class="bold">{{ $right }}</span><span>{{ $left }}</span></div>
 @endforeach
 
 <hr>
 
 @foreach ($doc->items() as $item)
     <div class="row item">
-        <span>{{ $item['qty'] }} × {{ $item['name'] }}</span>
+        <span>{{ $doc->itemLabel($item) }}</span>
         <span class="amount">{{ number_format($item['total'], 2) }}</span>
     </div>
-    @if ($item['qty'] > 1)
-        {{-- A line of three cannot be checked against the menu without it. --}}
-        <div class="row item-unit">
-            <span></span>
-            <span class="amount">{{ $item['qty'] }} × {{ number_format($item['unit'], 2) }}</span>
-        </div>
-    @endif
     @foreach ($item['notes'] as $note)
         <div class="item-note">{{ $note }}</div>
     @endforeach
@@ -151,49 +147,47 @@
 
 <hr>
 
-@foreach ($doc->totals() as $label => $amount)
-    <div class="row"><span>{{ $label }}</span><span class="amount">{{ number_format($amount, 2) }}</span></div>
-@endforeach
-
-<div class="row total">
-    <span>الإجمالي</span>
-    <span class="amount">{{ number_format($doc->total(), 2) }} ₪</span>
-</div>
-
-<div class="row" style="margin-top:1.5mm">
-    <span>الدفع</span><span class="bold">{{ $doc->paymentLabel() }}</span>
-</div>
-
-@if ($driver = $doc->driverLine())
-    {{-- The box the "غير مدفوع" banner used to have. On a delivery slip the
-         thing worth seeing at a glance is who is carrying it. --}}
-    <div class="driver-box">السائق: {{ $driver }}</div>
+@if ($totals = $doc->totalsLine())
+    <div class="small">{{ $totals }}</div>
 @endif
 
-@if ($lines = $doc->addressLines())
-    <hr>
-    <div class="bold">عنوان التوصيل</div>
-    @foreach ($lines as $line)
-        <div>{{ $line }}</div>
-    @endforeach
+{{-- The total and how it was paid are read together, so they share a line. --}}
+<div class="row total">
+    <span>الإجمالي {{ number_format($doc->total(), 2) }} ₪</span>
+    <span>{{ $doc->paymentLabel() }}</span>
+</div>
+
+@foreach ($doc->tenderLines() as $label => $value)
+    <div class="row small"><span>{{ $label }}</span><span class="amount">{{ $value }}</span></div>
+@endforeach
+
+@if ($doc->tenderLines() !== [])
+    <div class="center bold">*** لا تُعِد باقياً نقداً ***</div>
+@endif
+
+@if ($driver = $doc->driverLine())
+    <div class="driver">السائق: {{ $driver }}</div>
+@endif
+
+@if ($address = $doc->addressLine())
+    <div class="small"><span class="bold">العنوان:</span> {{ $address }}</div>
 @endif
 
 @if (filled($doc->order->notes))
-    <hr>
-    <div><span class="bold">ملاحظة الطلب:</span> {{ $doc->order->notes }}</div>
+    <div><span class="bold">ملاحظة:</span> {{ $doc->order->notes }}</div>
 @endif
 
 @if ($doc->order->delivery_method === 'delivery' && filled($doc->order->captain_note))
-    <div><span class="bold">ملاحظة للكابتن:</span> {{ $doc->order->captain_note }}</div>
+    <div class="small"><span class="bold">للكابتن:</span> {{ $doc->order->captain_note }}</div>
 @endif
 
 <hr>
-<div class="center footer">{{ $doc->footer() }}</div>
 
-@if ($doc->order->print_count > 0)
-    {{-- Marks a duplicate so a reprint cannot be passed off as a second sale. --}}
-    <div class="center">— نسخة مُعادة —</div>
-@endif
+{{-- Footer and the duplicate marker share the last line; the marker is what
+     stops a reprint being passed off as a second sale. --}}
+<div class="center small">
+    {{ $doc->footer() }}@if ($doc->order->print_count > 0) · — نسخة مُعادة —@endif
+</div>
 
 <div class="controls">
     <button onclick="window.print()">طباعة</button>

@@ -26,7 +26,7 @@ class TopUpRequestRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'amount' => ['required', 'numeric', 'min:1', 'max:10000'],
+            'amount' => ['required', 'numeric', 'min:1', 'max:' . (float) config('storefront.limits.max_topup', 500)],
             'method' => ['required', Rule::in(TopUpRequest::METHODS)],
 
             // Type and size are checked properly in ReceiptStorage, which
@@ -56,6 +56,7 @@ class TopUpRequestRequest extends FormRequest
         return [
             'amount.required'            => 'المبلغ مطلوب',
             'amount.min'                 => 'أقل مبلغ للشحن هو 1 ₪',
+            'amount.max'                 => 'أقصى مبلغ للشحن هو ' . (float) config('storefront.limits.max_topup', 500) . ' ₪',
             'method.required'            => 'طريقة الشحن مطلوبة',
             'method.in'                  => 'طريقة الشحن غير مدعومة',
             'receiptNote.required_without' => 'أرفق صورة الإيصال أو اكتب ملاحظة توضح التحويل',
