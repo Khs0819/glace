@@ -160,6 +160,10 @@ return [
     'limits' => [
         'max_change' => (float) env('GLACE_MAX_CHANGE', 199),
         'max_topup'  => (float) env('GLACE_MAX_TOPUP', 500),
+
+        // The most cash an accountant may take for one order. Above it, the
+        // order is taken by a manager; managers have no such ceiling.
+        'accountant_max_cash' => (float) env('GLACE_ACCOUNTANT_MAX_CASH', 200),
     ],
 
     /*

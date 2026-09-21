@@ -63,6 +63,12 @@ class DeliveryZoneResource extends Resource
 
                 Forms\Components\TextInput::make('sort_order')->label('الترتيب')->numeric()->default(0),
 
+                // A switch rather than a fee of zero: the normal fee stays
+                // on the zone, so turning the offer off puts it straight back.
+                Forms\Components\Toggle::make('free_delivery')
+                    ->label('توصيل مجاني')
+                    ->helperText('يُحسب التوصيل لهذه المنطقة صفراً ويظهر للزبون «مجاني»، دون مسح الرسوم الأصلية.'),
+
                 Forms\Components\Toggle::make('available')
                     ->label('متاحة للتوصيل')
                     ->default(true)
@@ -80,7 +86,11 @@ class DeliveryZoneResource extends Resource
 
                 Tables\Columns\TextColumn::make('id')->label('المعرف')->badge()->color('gray')->searchable(),
 
-                Tables\Columns\TextColumn::make('fee')->label('الرسوم')->suffix(' ₪')->sortable(),
+                Tables\Columns\TextColumn::make('fee')->label('الرسوم')->suffix(' ₪')->sortable()
+                    ->description(fn ($record) => $record->free_delivery ? 'مجاني حالياً' : null),
+
+                // Switched straight from the list: an offer is often for one evening.
+                Tables\Columns\ToggleColumn::make('free_delivery')->label('توصيل مجاني'),
 
                 Tables\Columns\TextColumn::make('addresses_count')
                     ->label('عناوين')

@@ -370,7 +370,8 @@ class StorefrontOrderService
 
         $zone = \App\Models\DeliveryZone::find($zoneId);
 
-        return $zone === null ? 0 : Money::toAgorot($zone->fee);
+        // chargedFee(): nothing when the zone is on free delivery.
+        return $zone === null ? 0 : Money::toAgorot($zone->chargedFee());
     }
 
     /**

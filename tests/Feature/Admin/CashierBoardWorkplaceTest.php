@@ -236,8 +236,10 @@ it('prepares and readies every channel, and readies a delivery before the road',
     expect((new Order(['delivery_method' => 'dine-in', 'status' => Order::FULFILMENT_REVIEW]))->allowedNextStatuses())
         ->toContain(Order::FULFILMENT_PREPARING, Order::FULFILMENT_READY);
 
+    // No driver yet: the only way on is choosing one. "تم الاستلام" waits for
+    // a driver, and "مسترد" is a refund action, not a status to pick.
     expect((new Order(['delivery_method' => 'delivery', 'status' => Order::FULFILMENT_READY]))->allowedNextStatuses())
-        ->toBe([Order::FULFILMENT_ON_WAY, Order::FULFILMENT_RECEIVED, Order::FULFILMENT_CANCELLED, Order::FULFILMENT_REFUNDED]);
+        ->toBe([Order::FULFILMENT_ON_WAY, Order::FULFILMENT_CANCELLED]);
 });
 
 it('books the delivery fee to the driver who is chosen', function () {

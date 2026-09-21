@@ -617,17 +617,22 @@ it('refuses an invalid email for the summary', function () {
 it('offers only the steps that make sense for the delivery method', function () {
     $order = new Order(['delivery_method' => 'pickup', 'status' => Order::FULFILMENT_REVIEW]);
 
+    // "مسترد" is not offered: a refund is an action that moves money.
     expect($order->allowedNextStatuses())
-        ->toBe(['جاري التحضير', 'جاهز للاستلام', 'تم التسليم', 'ملغي', 'مسترد']);
+        ->toBe(['جاري التحضير', 'جاهز للاستلام', 'تم التسليم', 'ملغي']);
 
     $delivery = new Order(['delivery_method' => 'delivery', 'status' => Order::FULFILMENT_PREPARING]);
 
-    // A delivery is made ready at the counter before it goes on the road.
-    expect($delivery->allowedNextStatuses())->toBe(['جاهز للاستلام', 'في الطريق', 'تم الاستلام', 'ملغي', 'مسترد']);
+    // A delivery is made ready at the counter before it goes on the road, and
+    // cannot be closed as received before a driver has been named.
+    expect($delivery->allowedNextStatuses())->toBe(['جاهز للاستلام', 'في الطريق', 'ملغي']);
+
+    $delivery->driver_id = 1;
+    expect($delivery->allowedNextStatuses())->toBe(['جاهز للاستلام', 'في الطريق', 'تم الاستلام', 'ملغي']);
 
     $dineIn = new Order(['delivery_method' => 'dine-in', 'status' => Order::FULFILMENT_REVIEW]);
 
-    expect($dineIn->allowedNextStatuses())->toBe(['جاري التحضير', 'جاهز للاستلام', 'تم التسليم', 'ملغي', 'مسترد']);
+    expect($dineIn->allowedNextStatuses())->toBe(['جاري التحضير', 'جاهز للاستلام', 'تم التسليم', 'ملغي']);
 });
 
 it('offers nothing once an order is closed', function () {

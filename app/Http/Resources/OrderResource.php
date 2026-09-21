@@ -83,6 +83,8 @@ class OrderResource extends JsonResource
             'couponCode'  => $this->coupon_code,
             'discount'    => $this->discount,
             'deliveryFee' => $this->delivery_fee,
+            // Say "مجاني" rather than "0.00" on a delivery that cost nothing.
+            'freeDelivery' => $this->delivery_method === 'delivery' && (float) $this->delivery_fee <= 0.001,
             'total'       => $this->total,
             'currency'    => $this->currency,
 

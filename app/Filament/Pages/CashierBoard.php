@@ -9,6 +9,8 @@ use App\Models\DriverSettlement;
 use App\Models\Order;
 use App\Services\Checkout\Money;
 use App\Services\Drivers\DriverPayoutService;
+use App\Services\Orders\CashLimits;
+use App\Services\Orders\OrderFulfilment;
 use App\Services\Printing\ReceiptPrinter;
 use App\Services\Storefront\OrderRefundService;
 use App\Services\Storefront\WalletService;
@@ -253,6 +255,10 @@ class CashierBoard extends Page
             return;
         }
 
+        if (! $this->withinCashLimits($order, (float) ($order->tendered_amount ?? $order->total))) {
+            return;
+        }
+
         $change = $order->changeDue();
 
         DB::transaction(function () use ($order, $shift, $change) {
@@ -345,6 +351,10 @@ class CashierBoard extends Page
             return;
         }
 
+        if (! $this->withinCashLimits($order, $tendered)) {
+            return;
+        }
+
         $change = max(0.0, round($tendered - $order->total, 2));
 
         DB::transaction(function () use ($order, $shift, $tendered, $change, $refundData) {
@@ -389,48 +399,13 @@ class CashierBoard extends Page
     {
         $order = Order::where('reference', $reference)->firstOrFail();
 
-        if (! in_array($status, $order->allowedNextStatuses(), true)) {
-            Notification::make()->title('حالة غير متاحة لهذا الطلب')->danger()->send();
+        try {
+            app(OrderFulfilment::class)->advance($order, $status);
+        } catch (RuntimeException $e) {
+            Notification::make()->title($e->getMessage())->danger()->send();
 
             return;
         }
-
-        // Guarded here rather than only in the button that hides it: "في
-        // الطريق" with nobody named is a delivery the shop cannot answer a
-        // question about, and the screen is not the only way to reach this.
-        if ($status === Order::FULFILMENT_ON_WAY && ! $order->canGoOnTheRoad()) {
-            Notification::make()
-                ->title('عيّن سائقاً أولاً')
-                ->body('لا يمكن وضع طلب توصيل «في الطريق» بدون سائق — العميل سيسأل عن طلبه ولن يكون لدينا جواب.')
-                ->danger()
-                ->send();
-
-            return;
-        }
-
-        DB::transaction(function () use ($order, $status) {
-            $order->update(array_filter([
-                'status'       => $status,
-                'delivered_at' => $status === Order::FULFILMENT_DELIVERED ? now() : $order->delivered_at,
-                'received_at'  => $status === Order::FULFILMENT_RECEIVED ? now() : $order->received_at,
-                'cancelled_at' => $status === Order::FULFILMENT_CANCELLED ? now() : $order->cancelled_at,
-            ], fn ($value) => $value !== null));
-
-            // The driver's fee was booked when they were chosen. Receiving the
-            // order records when it arrived; cancelling it before the driver has
-            // been paid takes the fee back off their balance.
-            if ($status === Order::FULFILMENT_RECEIVED) {
-                DriverSettlement::where('order_id', $order->getKey())
-                    ->whereNull('delivered_at')
-                    ->update(['delivered_at' => now()]);
-            }
-
-            if (in_array($status, [Order::FULFILMENT_CANCELLED, Order::FULFILMENT_REFUNDED], true)) {
-                DriverSettlement::where('order_id', $order->getKey())
-                    ->whereNull('payout_id')
-                    ->delete();
-            }
-        });
 
         Notification::make()->title('تم تحديث الحالة')->success()->send();
     }
@@ -465,39 +440,26 @@ class CashierBoard extends Page
     public function assignDriver(string $reference, int $driverId): void
     {
         $order  = Order::where('reference', $reference)->firstOrFail();
-        $driver = Driver::active()->find($driverId);
-
-        if ($order->delivery_method !== 'delivery') {
-            Notification::make()->title('هذا الطلب ليس توصيلاً')->warning()->send();
-
-            return;
-        }
+        $driver = Driver::find($driverId);
 
         if (! $driver) {
-            Notification::make()->title('السائق غير موجود أو غير مفعّل')->danger()->send();
+            Notification::make()->title('السائق غير موجود')->danger()->send();
 
             return;
         }
 
-        if ($order->isFinal()) {
-            Notification::make()->title('الطلب مغلق — لا يمكن تعيين سائق')->warning()->send();
+        $changing = $order->driver_id !== null && $order->driver_id !== $driver->getKey();
+
+        try {
+            app(OrderFulfilment::class)->assignDriver($order, $driver, $this->shift()?->getKey());
+        } catch (RuntimeException $e) {
+            Notification::make()->title($e->getMessage())->danger()->send();
 
             return;
         }
-
-        $order->update([
-            'driver_id'          => $driver->getKey(),
-            // Frozen alongside the link: renaming a driver next month must not
-            // rewrite what this delivery said today.
-            'driver'             => $driver->snapshot(),
-            'driver_assigned_at' => now(),
-            'status'             => Order::FULFILMENT_ON_WAY,
-        ]);
-
-        $this->bookDeliveryFee($order->fresh(), $driver);
 
         Notification::make()
-            ->title('في الطريق مع ' . $driver->name)
+            ->title($changing ? 'تم تغيير السائق إلى ' . $driver->name : 'في الطريق مع ' . $driver->name)
             ->body($driver->phone)
             ->success()
             ->send();
@@ -661,32 +623,6 @@ class CashierBoard extends Page
     }
 
     /**
-     * The delivery fee, booked to the driver the moment they are chosen.
-     *
-     * One row per order. Choosing a different driver moves the fee rather than
-     * adding a second one, and a fee already transferred is left alone:
-     * reassigning after paying out must not silently take it back.
-     */
-    private function bookDeliveryFee(Order $order, Driver $driver): void
-    {
-        $settlement = DriverSettlement::firstOrNew(['order_id' => $order->getKey()]);
-
-        if ($settlement->exists && $settlement->paidOut()) {
-            return;
-        }
-
-        $settlement->fill([
-            'driver_id'       => $driver->getKey(),
-            'shift_id'        => $this->shift()?->getKey(),
-            'order_reference' => $order->reference,
-            'order_total'     => $order->total,
-            'delivery_fee'    => (float) $order->delivery_fee,
-            'payment_method'  => $order->payment_method,
-            'cash_collected'  => false,
-        ])->save();
-    }
-
-    /**
      * Take cash, and send any change to the customer's wallet.
      *
      * The cashier types what the customer handed over; whatever is above the
@@ -729,16 +665,7 @@ class CashierBoard extends Page
             return;
         }
 
-        $maxChange = (float) config('storefront.limits.max_change', 199);
-
-        if ($tendered - (float) $order->total > $maxChange) {
-            Notification::make()
-                ->title('الباقي أكبر من الحد الأقصى')
-                ->body("الحد الأقصى للباقي {$maxChange} ₪. تأكد من المبلغ المستلم.")
-                ->danger()
-                ->persistent()
-                ->send();
-
+        if (! $this->withinCashLimits($order, $tendered)) {
             return;
         }
 
@@ -919,6 +846,8 @@ class CashierBoard extends Page
             ->map(fn (ChangeRefundRequest $request) => [
                 'id'          => $request->getKey(),
                 'reference'   => $request->order_reference,
+                'kind'        => $request->kindLabel(),
+                'wholeOrder'  => $request->isOrderRefund(),
                 'amount'      => (float) $request->amount,
                 'holderName'  => $request->holder_name,
                 'holderPhone' => $request->holder_phone,
@@ -978,7 +907,9 @@ class CashierBoard extends Page
     public function completeRefundAction(): Action
     {
         return Action::make('completeRefund')
-            ->modalHeading('تأكيد تحويل الباقي للزبون')
+            ->modalHeading(fn (array $arguments) => ChangeRefundRequest::find($arguments['id'] ?? null)?->isOrderRefund()
+                ? 'تأكيد استرداد قيمة الطلب'
+                : 'تأكيد تحويل الباقي للزبون')
             ->modalDescription(function (array $arguments) {
                 $request = ChangeRefundRequest::find($arguments['id'] ?? null);
 
@@ -1006,17 +937,156 @@ class CashierBoard extends Page
                     return;
                 }
 
-                $request->update([
-                    'status'           => ChangeRefundRequest::STATUS_COMPLETED,
-                    'transfer_receipt' => $data['transfer_receipt'] ?? null,
-                    'reviewed_by'      => auth()->id(),
-                    'reviewed_at'      => now(),
-                ]);
+                $request->complete($data['transfer_receipt'] ?? null, auth()->id());
 
-                Notification::make()->title('تم تأكيد تحويل الباقي')->success()->send();
+                Notification::make()
+                    ->title($request->isOrderRefund() ? 'تم تأكيد الاسترداد — الطلب مسترد' : 'تم تأكيد تحويل الباقي')
+                    ->success()
+                    ->send();
 
                 $this->dispatch('cashier-refresh');
             });
+    }
+
+    /**
+     * Put an order back a step after a mistake — a delivery marked delivered
+     * before anyone took it, a cancellation pressed on the wrong card.
+     * Open to the counter as well as the manager: the person who made the
+     * mistake is the one standing there to fix it.
+     */
+    public function correctStatusAction(): Action
+    {
+        return Action::make('correctStatus')
+            ->modalHeading('تصحيح حالة الطلب')
+            ->modalDescription(function (array $arguments) {
+                $order = Order::where('reference', $arguments['reference'] ?? '')->first();
+
+                return $order ? "الطلب {$order->reference} — الحالة الحالية: {$order->status}" : null;
+            })
+            ->modalSubmitActionLabel('إرجاع الحالة')
+            ->form(fn (array $arguments) => [
+                Forms\Components\Select::make('status')
+                    ->label('إرجاع الطلب إلى')
+                    ->options(function () use ($arguments) {
+                        $order = Order::where('reference', $arguments['reference'] ?? '')->first();
+                        $steps = $order?->correctableStatuses() ?? [];
+
+                        return array_combine($steps, $steps);
+                    })
+                    ->required()
+                    ->native(false),
+            ])
+            ->action(function (array $data, array $arguments) {
+                $order = Order::where('reference', $arguments['reference'] ?? '')->first();
+
+                if (! $order) {
+                    return;
+                }
+
+                try {
+                    app(OrderFulfilment::class)->correct($order, $data['status']);
+                } catch (RuntimeException $e) {
+                    Notification::make()->title($e->getMessage())->danger()->send();
+
+                    return;
+                }
+
+                Notification::make()->title('تم تصحيح الحالة إلى «' . $data['status'] . '»')->success()->send();
+
+                $this->dispatch('cashier-refresh');
+            });
+    }
+
+    /**
+     * Give a paid order's money back — the button "مسترد" in the status list
+     * pretended to be. Wallet and cash settle now; a transfer goes to the
+     * refunds list and the order reads "مسترد" once it has been sent.
+     */
+    public function refundOrderAction(): Action
+    {
+        $order = fn (array $arguments) => Order::with('customer')->where('reference', $arguments['reference'] ?? '')->first();
+
+        return Action::make('refundOrder')
+            ->modalHeading('استرداد قيمة الطلب')
+            ->modalDescription(fn (array $arguments) => ($o = $order($arguments))
+                ? "الطلب {$o->reference} — المبلغ " . number_format($o->total, 2) . ' ₪'
+                : null)
+            ->modalSubmitActionLabel('استرداد')
+            ->form(fn (array $arguments) => [
+                Forms\Components\Select::make('method')
+                    ->label('طريقة الاسترداد')
+                    ->options(array_filter([
+                        'wallet' => $order($arguments)?->customer ? 'إلى محفظة الزبون (فوري)' : null,
+                        'cash'   => 'نقداً من الدرج (فوري)',
+                        'jawwal' => 'تحويل جوال باي',
+                        'bop'    => 'تحويل بنك فلسطين',
+                        'palpay' => 'تحويل بال باي',
+                    ]))
+                    ->required()
+                    ->live()
+                    ->native(false),
+
+                Forms\Components\TextInput::make('holder_name')
+                    ->label('اسم صاحب الحساب')
+                    ->default(fn () => $order($arguments)?->customer_name)
+                    ->required(fn (Forms\Get $get) => ! in_array($get('method'), ['wallet', 'cash', null], true))
+                    ->visible(fn (Forms\Get $get) => ! in_array($get('method'), ['wallet', 'cash', null], true)),
+
+                Forms\Components\TextInput::make('holder_phone')
+                    ->label('رقم الحساب / المحفظة')
+                    ->default(fn () => $order($arguments)?->customer_phone)
+                    ->required(fn (Forms\Get $get) => ! in_array($get('method'), ['wallet', 'cash', null], true))
+                    ->visible(fn (Forms\Get $get) => ! in_array($get('method'), ['wallet', 'cash', null], true)),
+
+                Forms\Components\Textarea::make('notes')->label('سبب الاسترداد')->rows(2),
+            ])
+            ->action(function (array $data, array $arguments) use ($order) {
+                $record = $order($arguments);
+
+                if (! $record) {
+                    return;
+                }
+
+                try {
+                    $request = app(OrderFulfilment::class)->refund($record, $data['method'], $data, auth()->id());
+                } catch (RuntimeException $e) {
+                    Notification::make()->title($e->getMessage())->danger()->send();
+
+                    return;
+                }
+
+                Notification::make()
+                    ->title($request
+                        ? 'أُضيف طلب الاسترداد إلى قائمة طلبات الاسترداد — يُغلق بعد رفع إشعار التحويل'
+                        : 'تم الاسترداد — الطلب مسترد')
+                    ->success()
+                    ->persistent()
+                    ->send();
+
+                $this->dispatch('cashier-refresh');
+            });
+    }
+
+    /**
+     * The counter's two cash ceilings, shown as a notice rather than thrown:
+     * a refusal here is an instruction to the cashier, not an error.
+     */
+    private function withinCashLimits(Order $order, float $received): bool
+    {
+        try {
+            app(CashLimits::class)->assertCanReceive(auth()->user(), $order, $received);
+        } catch (RuntimeException $e) {
+            Notification::make()
+                ->title('لا يمكن استلام هذا المبلغ')
+                ->body($e->getMessage())
+                ->danger()
+                ->persistent()
+                ->send();
+
+            return false;
+        }
+
+        return true;
     }
 
     public function payDriverAction(): Action

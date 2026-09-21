@@ -241,7 +241,53 @@ class Order extends Model
 
         $forward = $index === false ? $flow : array_slice($flow, $index + 1);
 
-        return array_values(array_merge($forward, [self::FULFILMENT_CANCELLED, self::FULFILMENT_REFUNDED]));
+        // A delivery cannot be closed off by nobody: until a driver is named,
+        // the only way past "جاهز" is choosing one ("في الطريق").
+        if ($this->delivery_method === 'delivery' && $this->driver_id === null) {
+            $forward = array_diff($forward, [self::FULFILMENT_RECEIVED, self::FULFILMENT_DELIVERED]);
+        }
+
+        // "مسترد" is not offered here. As a bare status it moved no money and
+        // left the order locked; a refund goes through the refund action, which
+        // sets it once the money has actually gone back.
+        return array_values(array_merge($forward, [self::FULFILMENT_CANCELLED]));
+    }
+
+    /**
+     * Earlier steps this order may be put back to, after a mistake.
+     *
+     * A delivered order goes back to any step before delivery; a cancelled
+     * one to any step at all. A refunded order has none: the money has moved,
+     * and changing a label will not move it back.
+     *
+     * @return array<int, string>
+     */
+    public function correctableStatuses(): array
+    {
+        if ($this->status === self::FULFILMENT_REFUNDED) {
+            return [];
+        }
+
+        $flow = $this->fulfilmentFlow();
+
+        if ($this->status === self::FULFILMENT_CANCELLED) {
+            // The last step of the flow is a closing one; re-opening straight
+            // into it would be closing again.
+            return array_slice($flow, 0, -1);
+        }
+
+        $index = array_search($this->status, $flow, true);
+
+        return $index === false || $index === 0 ? [] : array_slice($flow, 0, $index);
+    }
+
+    /** A whole-order refund waiting for somebody to send the transfer. */
+    public function hasPendingOrderRefund(): bool
+    {
+        return $this->changeRefundRequests()
+            ->where('kind', ChangeRefundRequest::KIND_ORDER)
+            ->where('status', ChangeRefundRequest::STATUS_PENDING)
+            ->exists();
     }
 
     /**
@@ -332,8 +378,11 @@ class Order extends Model
     }
 
     /** Refunded as store credit rather than handed back in notes. */
-    public const REFUND_WALLET = 'wallet';
-    public const REFUND_CASH   = 'cash';
+    public const REFUND_WALLET   = 'wallet';
+    public const REFUND_CASH     = 'cash';
+
+    /** Sent back by bank or wallet transfer; never touches the drawer. */
+    public const REFUND_TRANSFER = 'transfer';
 
     public function isRefunded(): bool
     {
@@ -370,7 +419,10 @@ class Order extends Model
             return 0.0;
         }
 
+        // Change only: a whole-order refund is a different sum and must not be
+        // read as the change having been paid back.
         $requested = (float) $this->changeRefundRequests()
+            ->where('kind', ChangeRefundRequest::KIND_CHANGE)
             ->where('status', '!=', ChangeRefundRequest::STATUS_REJECTED)
             ->sum('amount');
 

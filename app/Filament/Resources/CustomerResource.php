@@ -14,6 +14,7 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -134,7 +135,15 @@ class CustomerResource extends Resource
                     ->trueColor('danger')->falseColor('gray'),
             ])
             ->defaultSort('created_at', 'desc')
-            ->filters([Tables\Filters\TernaryFilter::make('blocked')->label('موقوف')])
+            ->filters([
+                // The customers the shop owes money to.
+                Tables\Filters\Filter::make('has_balance')
+                    ->label('لديهم رصيد في المحفظة')
+                    ->query(fn (Builder $query) => $query->whereHas('wallet', fn (Builder $wallet) => $wallet->where('balance', '>', 0)))
+                    ->toggle(),
+
+                Tables\Filters\TernaryFilter::make('blocked')->label('موقوف'),
+            ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),

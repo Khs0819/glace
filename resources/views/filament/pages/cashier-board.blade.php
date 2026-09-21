@@ -1005,11 +1005,28 @@
                                 </button>
                             </template>
 
-                            {{-- Assign driver --}}
-                            <template x-if="order.needsDriver && !order.final">
-                                <button class="btn-assign-driver" @click="openDriverModal(order)">
-                                    🚗 تعيين السائق
+                            {{-- Assign a driver, or swap the wrong one — at any point
+                                 short of a cancellation, "تم الاستلام" included. --}}
+                            <template x-if="order.canChangeDriver">
+                                <button class="btn-assign-driver" @click="openDriverModal(order)"
+                                        x-text="order.driver ? '🔁 تغيير السائق' : '🚗 تعيين السائق'"></button>
+                            </template>
+
+                            {{-- Put a status pressed by mistake back --}}
+                            <template x-if="order.canCorrect">
+                                <button class="btn-print" style="background:#64748b" @click="openCorrectStatus(order)" title="إرجاع الطلب لحالة سابقة">
+                                    ↩️ تصحيح الحالة
                                 </button>
+                            </template>
+
+                            {{-- Money back on a paid order --}}
+                            <template x-if="order.canRefund">
+                                <button class="btn-print" style="background:#b45309" @click="openRefundOrder(order)">
+                                    💸 استرداد المبلغ
+                                </button>
+                            </template>
+                            <template x-if="order.refundPending">
+                                <span class="text-xs font-bold text-amber-700">⏳ استرداد بانتظار التحويل</span>
                             </template>
                         </div>
                     </div>
@@ -1024,7 +1041,7 @@
                     <div class="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
                         <div class="flex items-center justify-between">
                             <div>
-                                <div class="text-lg font-bold">🚗 تعيين سائق</div>
+                                <div class="text-lg font-bold" x-text="modal.changing ? '🔁 تغيير السائق' : '🚗 تعيين سائق'"></div>
                                 <div class="text-sm text-gray-500" x-text="'الطلب: ' + modal.reference"></div>
                             </div>
                             <button @click="closeModal()" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
@@ -1078,7 +1095,7 @@
                             :disabled="!modal.selectedDriverId"
                             class="modal-btn-confirm"
                             :style="modal.selectedDriverId ? 'background:#2563eb' : 'background:#9ca3af'"
-                        >✅ تأكيد التعيين</button>
+                        x-text="modal.changing ? '✅ تأكيد التغيير' : '✅ تأكيد التعيين'"></button>
                     </div>
                 </div>
             </div>
@@ -1463,7 +1480,12 @@
                                 <span class="font-black text-sm" x-text="r.reference"></span>
                                 <span class="text-lg font-black text-amber-700" x-text="money(r.amount)"></span>
                             </div>
-                            <div class="text-sm font-bold" x-text="r.holderName"></div>
+                            <div class="flex items-center justify-between gap-2">
+                                <div class="text-sm font-bold" x-text="r.holderName"></div>
+                                <span class="text-xs font-bold px-2 py-0.5 rounded"
+                                      :class="r.wholeOrder ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'"
+                                      x-text="r.kind"></span>
+                            </div>
                             <div class="text-xs text-gray-500" x-text="[r.holderPhone, r.method, r.at].filter(Boolean).join(' — ')"></div>
                             <template x-if="r.notes">
                                 <div class="text-xs text-gray-600 mt-1" x-text="r.notes"></div>
@@ -2042,10 +2064,19 @@
                     this.$wire.mountAction('createDriver');
                 },
 
+                openCorrectStatus(order) {
+                    this.$wire.mountAction('correctStatus', { reference: order.reference });
+                },
+
+                openRefundOrder(order) {
+                    this.$wire.mountAction('refundOrder', { reference: order.reference });
+                },
+
                 async openDriverModal(order) {
                     const drivers = await this.$wire.drivers();
                     this.modal = {
                         type: 'driver',
+                        changing: !!order.driver,
                         reference: order.reference,
                         currentStatus: order.status,
                         options: [],

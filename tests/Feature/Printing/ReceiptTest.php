@@ -38,7 +38,7 @@ function receiptOrder(array $attributes = []): Order
 it('puts the destination where the counter reads it first', function () {
     $doc = new ReceiptDocument(receiptOrder(), ['name' => 'جلاسيه الأمير']);
 
-    expect($doc->kind())->toBe('داخل المحل')
+    expect($doc->kind())->toBe('تناول الآن')
         ->and($doc->destination())->toBe('طاولة 7');
 });
 

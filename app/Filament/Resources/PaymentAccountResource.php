@@ -32,6 +32,16 @@ class PaymentAccountResource extends Resource
     protected static ?int $navigationSort = 5;
     protected static ?string $slug = 'payment-accounts';
 
+    /**
+     * The manager's page. These are the numbers customers send money to: an
+     * accountant has no reason to change one, and a wrong digit sends real
+     * transfers somewhere else.
+     */
+    public static function canViewAny(): bool
+    {
+        return auth()->user()?->isManager() ?? false;
+    }
+
     public static function form(Form $form): Form
     {
         return $form->schema([

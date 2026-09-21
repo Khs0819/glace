@@ -30,7 +30,16 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
+            'role' => \App\Models\User::ROLE_MANAGER,
         ];
+    }
+
+    /** A counter account: no payment accounts, no deleting shifts, no staff. */
+    public function accountant(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'role' => \App\Models\User::ROLE_ACCOUNTANT,
+        ]);
     }
 
     /**

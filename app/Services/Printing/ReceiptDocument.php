@@ -54,8 +54,8 @@ class ReceiptDocument
     public function kind(): string
     {
         return match ($this->order->delivery_method) {
-            'dine-in'  => 'داخل المحل',
-            'pickup'   => 'استلام من المحل',
+            'dine-in'  => 'تناول الآن',
+            'pickup'   => 'استلام تيك أوي',
             'delivery' => 'توصيل',
             default    => '',
         };
@@ -91,13 +91,10 @@ class ReceiptDocument
      */
     public function titleLine(): array
     {
-        $kind = $this->kind();
-
-        if ($destination = $this->destination()) {
-            $kind = trim($kind . ' · ' . $destination);
-        }
-
-        return [$this->shopName(), $kind];
+        // The kind alone. The area is already on the address line and the
+        // table in the header; repeated here they crowded the one word the
+        // counter reads first.
+        return [$this->shopName(), $this->kind()];
     }
 
     /** Address, phone and tax number on one line, or null when there are none. */
@@ -175,6 +172,10 @@ class ReceiptDocument
             $parts[] = ($short[$label] ?? $label) . ' ' . number_format($amount, 2);
         }
 
+        if ($this->freeDelivery()) {
+            $parts[] = 'توصيل مجاني';
+        }
+
         return $parts === [] ? null : implode(' · ', $parts);
     }
 
@@ -230,6 +231,12 @@ class ReceiptDocument
             'الخصم'        => -$order->discount,
             'رسوم التوصيل' => $order->delivery_fee,
         ], static fn ($value) => abs((float) $value) > 0.001);
+    }
+
+    /** A delivery that cost the customer nothing, so the slip can say so. */
+    public function freeDelivery(): bool
+    {
+        return $this->order->delivery_method === 'delivery' && (float) $this->order->delivery_fee <= 0.001;
     }
 
     public function total(): float

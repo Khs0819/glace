@@ -90,6 +90,13 @@ class ChangeRefundRequestResource extends Resource
                     ->weight('bold')
                     ->copyable(),
 
+                // The change from a cash sale, or a whole order given back.
+                Tables\Columns\TextColumn::make('kind')
+                    ->label('النوع')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state) => ChangeRefundRequest::KINDS[$state] ?? ChangeRefundRequest::KINDS[ChangeRefundRequest::KIND_CHANGE])
+                    ->color(fn (?string $state) => $state === ChangeRefundRequest::KIND_ORDER ? 'danger' : 'gray'),
+
                 Tables\Columns\TextColumn::make('amount')
                     ->label('المبلغ')
                     ->money('ILS')
@@ -187,12 +194,8 @@ class ChangeRefundRequestResource extends Resource
                             ->required(),
                     ])
                     ->action(function (ChangeRefundRequest $record, array $data) {
-                        $record->update([
-                            'status'           => 'completed',
-                            'transfer_receipt' => $data['transfer_receipt'] ?? null,
-                            'reviewed_by'      => auth()->id(),
-                            'reviewed_at'      => now(),
-                        ]);
+                        $record->complete($data['transfer_receipt'] ?? null, auth()->id());
+
                         Notification::make()->title('تم تأكيد التحويل')->success()->send();
                     }),
 
@@ -219,12 +222,11 @@ class ChangeRefundRequestResource extends Resource
                     ->color('success')
                     ->requiresConfirmation()
                     ->action(function ($records) {
-                        $records->each(fn ($r) => $r->update([
-                            'status'      => 'completed',
-                            'reviewed_by' => auth()->id(),
-                            'reviewed_at' => now(),
-                        ]));
-                        Notification::make()->title('تم تحويل ' . $records->count() . ' طلبات')->success()->send();
+                        $done = $records
+                            ->filter(fn (ChangeRefundRequest $r) => $r->isPending())
+                            ->each(fn (ChangeRefundRequest $r) => $r->complete(null, auth()->id()));
+
+                        Notification::make()->title('تم تحويل ' . $done->count() . ' طلبات')->success()->send();
                     }),
             ])
             ->emptyStateHeading('لا توجد طلبات استرداد')

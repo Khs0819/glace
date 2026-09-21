@@ -4,7 +4,9 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\OrderResource\Pages;
 use App\Filament\Resources\OrderResource\RelationManagers;
+use App\Models\Driver;
 use App\Models\Order;
+use App\Services\Orders\OrderFulfilment;
 use App\Models\Payment;
 use App\Services\Checkout\Money;
 use App\Services\Storefront\OrderRefundService;
@@ -390,46 +392,79 @@ class OrderResource extends Resource
                             ->visible($record->delivery_method === 'delivery'),
                     ])
                     ->action(function (Order $record, array $data) {
-                        $status = $data['status'];
+                        // The same rules as the cashier screen: no delivery is
+                        // closed without a driver, and "مسترد" is not a label.
+                        try {
+                            app(OrderFulfilment::class)->advance($record, $data['status']);
+                        } catch (RuntimeException $e) {
+                            Notification::make()->title($e->getMessage())->danger()->send();
+
+                            return;
+                        }
 
                         $record->update(array_filter([
-                            'status'                  => $status,
                             'preparation_time'        => $data['preparation_time'] ?? null,
                             'estimated_delivery_time' => $data['estimated_delivery_time'] ?? null,
-
-                            // Stamped as the order passes each milestone, so
-                            // the tracker can show when, not just whether.
-                            'delivered_at' => $status === Order::FULFILMENT_DELIVERED ? now() : $record->delivered_at,
-                            'received_at'  => $status === Order::FULFILMENT_RECEIVED ? now() : $record->received_at,
-                            'cancelled_at' => $status === Order::FULFILMENT_CANCELLED ? now() : $record->cancelled_at,
                         ], fn ($value) => $value !== null));
 
                         Notification::make()->title('تم تحديث حالة الطلب')->success()->send();
                     }),
 
-                // Only meaningful once something is actually going out.
-                Tables\Actions\Action::make('assignDriver')
-                    ->label('تعيين سائق')
-                    ->icon('heroicon-o-truck')
-                    ->color('info')
-                    ->visible(fn (Order $record) => $record->delivery_method === 'delivery' && ! $record->isFinal())
-                    ->form([
-                        Forms\Components\TextInput::make('name')->label('اسم السائق')->required()->maxLength(120),
-                        Forms\Components\TextInput::make('phone')->label('هاتف السائق')->required()->maxLength(20),
-                        Forms\Components\TextInput::make('company')->label('الشركة')->maxLength(120),
+                // Undo a status pressed by mistake.
+                Tables\Actions\Action::make('correctStatus')
+                    ->label('تصحيح الحالة')
+                    ->icon('heroicon-o-arrow-uturn-left')
+                    ->color('gray')
+                    ->visible(fn (Order $record) => $record->correctableStatuses() !== [])
+                    ->form(fn (Order $record) => [
+                        Forms\Components\Select::make('status')
+                            ->label('إرجاع الطلب إلى')
+                            ->options(array_combine($record->correctableStatuses(), $record->correctableStatuses()))
+                            ->required()
+                            ->native(false),
                     ])
                     ->action(function (Order $record, array $data) {
-                        $record->update([
-                            'driver' => [
-                                'id'      => (string) Str::ulid(),
-                                'name'    => $data['name'],
-                                'phone'   => $data['phone'],
-                                'company' => $data['company'] ?? null,
-                            ],
-                            'driver_assigned_at' => now(),
-                        ]);
+                        try {
+                            app(OrderFulfilment::class)->correct($record, $data['status']);
+                        } catch (RuntimeException $e) {
+                            Notification::make()->title($e->getMessage())->danger()->send();
 
-                        Notification::make()->title('تم تعيين السائق')->success()->send();
+                            return;
+                        }
+
+                        Notification::make()->title('تم تصحيح الحالة')->success()->send();
+                    }),
+
+                // Only meaningful once something is actually going out.
+                // From the drivers list, never typed in: a typed name linked the
+                // order to nobody, so the fee went nowhere and the cashier's
+                // card still asked for a driver.
+                Tables\Actions\Action::make('assignDriver')
+                    ->label(fn (Order $record) => $record->driver_id ? 'تغيير السائق' : 'تعيين سائق')
+                    ->icon('heroicon-o-truck')
+                    ->color('info')
+                    ->visible(fn (Order $record) => $record->delivery_method === 'delivery'
+                        && ! in_array($record->status, [Order::FULFILMENT_CANCELLED, Order::FULFILMENT_REFUNDED], true))
+                    ->form(fn (Order $record) => [
+                        Forms\Components\Select::make('driver_id')
+                            ->label('السائق')
+                            ->options(Driver::active()->orderBy('name')->pluck('name', 'id'))
+                            ->default($record->driver_id)
+                            ->searchable()
+                            ->required(),
+                    ])
+                    ->action(function (Order $record, array $data) {
+                        $driver = Driver::find($data['driver_id']);
+
+                        try {
+                            app(OrderFulfilment::class)->assignDriver($record, $driver);
+                        } catch (RuntimeException $e) {
+                            Notification::make()->title($e->getMessage())->danger()->send();
+
+                            return;
+                        }
+
+                        Notification::make()->title('تم تعيين السائق: ' . $driver->name)->success()->send();
                     }),
 
                 // Money back onto the customer's wallet, deliberately manual:

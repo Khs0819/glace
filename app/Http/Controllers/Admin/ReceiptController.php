@@ -139,6 +139,20 @@ class ReceiptController extends Controller
                 'needsDriver'    => $order->delivery_method === 'delivery' && $order->driver_id === null,
                 'final'          => $order->isFinal(),
 
+                // Mistakes have to be fixable from the card: a wrong status
+                // put back, a wrong driver swapped — even after "تم التسليم".
+                'canCorrect'      => $order->correctableStatuses() !== [],
+                'canChangeDriver' => $order->delivery_method === 'delivery'
+                    && ! in_array($order->status, [Order::FULFILMENT_CANCELLED, Order::FULFILMENT_REFUNDED], true),
+
+                // A paid order the customer cancelled: its money back, through
+                // a refund that records it rather than a status that does not.
+                'refundPending'   => $pendingRefund = $order->changeRefundRequests
+                    ->where('kind', ChangeRefundRequest::KIND_ORDER)
+                    ->where('status', ChangeRefundRequest::STATUS_PENDING)
+                    ->isNotEmpty(),
+                'canRefund'       => $order->isPaid() && ! $order->isRefunded() && ! $pendingRefund,
+
                 // Shown on the card only when present: a customer's note can be
                 // the one thing the counter must not miss.
                 'notes'          => filled($order->notes) ? $order->notes : null,

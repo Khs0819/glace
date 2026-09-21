@@ -154,7 +154,8 @@ it('advances an order along its own ladder', function () {
 });
 
 it('stamps the time when an order reaches a terminal step', function () {
-    $order = storefrontOrder(['status' => Order::FULFILMENT_ON_WAY]);
+    $driver = App\Models\Driver::create(['name' => 'محمود', 'phone' => '0599876543']);
+    $order  = storefrontOrder(['status' => Order::FULFILMENT_ON_WAY, 'driver_id' => $driver->id]);
 
     Livewire::test(App\Filament\Resources\OrderResource\Pages\ListOrders::class)
         ->callTableAction('advance', $order, ['status' => Order::FULFILMENT_RECEIVED]);
@@ -162,17 +163,20 @@ it('stamps the time when an order reaches a terminal step', function () {
     expect($order->fresh()->received_at)->not->toBeNull();
 });
 
-it('assigns a driver to a delivery', function () {
-    $order = storefrontOrder(['status' => Order::FULFILMENT_PREPARING]);
+it('assigns a driver from the drivers list, not a typed name', function () {
+    // A typed name linked the order to nobody: no fee was booked, and the
+    // cashier's card still asked for a driver.
+    $driver = App\Models\Driver::create(['name' => 'محمود الأحمد', 'phone' => '0599876543', 'company' => 'توصيل فلسطين']);
+    $order  = storefrontOrder(['status' => Order::FULFILMENT_PREPARING]);
 
     Livewire::test(App\Filament\Resources\OrderResource\Pages\ListOrders::class)
-        ->callTableAction('assignDriver', $order, [
-            'name' => 'محمود الأحمد', 'phone' => '0599876543', 'company' => 'توصيل فلسطين',
-        ])
+        ->callTableAction('assignDriver', $order, ['driver_id' => $driver->id])
         ->assertHasNoTableActionErrors();
 
-    expect($order->fresh()->driver['name'])->toBe('محمود الأحمد')
-        ->and($order->fresh()->driver_assigned_at)->not->toBeNull();
+    expect($order->fresh()->driver_id)->toBe($driver->id)
+        ->and($order->fresh()->driver['name'])->toBe('محمود الأحمد')
+        ->and($order->fresh()->status)->toBe(Order::FULFILMENT_ON_WAY)
+        ->and(App\Models\DriverSettlement::where('order_id', $order->id)->exists())->toBeTrue();
 });
 
 it('does not offer a driver for a pickup order', function () {

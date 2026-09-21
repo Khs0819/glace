@@ -17,7 +17,11 @@ class DeliveryZoneResource extends JsonResource
             'id'          => $this->id,
             'name'        => $this->name,
             'description' => $this->description,
-            'fee'         => $this->fee,
+            // What the customer pays: 0 while the zone is on free delivery.
+            'fee'          => $this->chargedFee(),
+            'freeDelivery' => (bool) $this->free_delivery,
+            // The usual fee, so the storefront can show it struck through.
+            'regularFee'   => $this->free_delivery ? (float) $this->fee : null,
         ], static fn ($value) => $value !== null);
     }
 }
