@@ -165,6 +165,12 @@ class WalletController extends Controller
             'receiptNote'  => $request->receipt_note,
             'senderAccountName' => $request->sender_account_name,
             'phone'        => $request->phone,
+            // What the reviewer wrote when refusing it, so the customer reads
+            // the actual reason instead of "contact us". Rejected requests only:
+            // a note on an approved one is for the shop, not the customer.
+            'rejectionReason' => $request->status === TopUpRequest::STATUS_REJECTED && filled($request->review_note)
+                ? $request->review_note
+                : null,
         ], static fn ($value) => $value !== null);
     }
 }

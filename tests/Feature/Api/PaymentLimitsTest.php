@@ -108,12 +108,14 @@ it('refuses an order on a payment method the shop switched off', function () {
     expect(Order::count())->toBe(0);
 });
 
-it('keeps the counter methods out of the transfer accounts list', function () {
-    // Their rows exist only so the shop can switch them off; a customer
-    // transfers nothing to a card reader.
-    $methods = array_column(test()->getJson('/api/payment-accounts')->assertOk()->json(), 'method');
+it('lists the counter methods that are on, without account details', function () {
+    // The storefront builds its options from this list, so cash and card are
+    // in it — but a card reader has no account number to show.
+    $accounts = collect(test()->getJson('/api/payment-accounts')->assertOk()->json())->keyBy('method');
 
-    expect($methods)->not->toContain('cash')->not->toContain('visa')->not->toContain('jawwal');
+    expect($accounts)->toHaveKeys(['cash', 'visa'])
+        ->and($accounts['cash']['type'])->toBe('counter')
+        ->and($accounts['cash'])->not->toHaveKeys(['holderName', 'primaryLabel', 'primaryValue']);
 });
 
 it('leaves a method with no account row available', function () {

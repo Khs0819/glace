@@ -55,6 +55,12 @@ class PaymentAccountResource extends Resource
                     ->unique(ignoreRecord: true)
                     ->live(),
 
+                Forms\Components\TextInput::make('display_name')
+                    ->label('الاسم الظاهر للزبون')
+                    ->maxLength(120)
+                    ->placeholder('مثال: جوال باي الآلي (أسرع طريقة)')
+                    ->helperText('يظهر في صفحة الدفع وشحن المحفظة وسجل الطلبات. اتركه فارغاً لاستخدام الاسم الافتراضي.'),
+
                 Forms\Components\TextInput::make('holder_name')
                     ->label('اسم صاحب الحساب')
                     ->required()
@@ -74,7 +80,10 @@ class PaymentAccountResource extends Resource
                     ->helperText('رقم الحساب البنكي أو رقم المحفظة')
                     ->visible(fn (Forms\Get $get) => in_array($get('method'), Order::RECEIPT_METHODS, true)),
 
-                Forms\Components\Toggle::make('active')->label('مفعّل')->default(true),
+                Forms\Components\Toggle::make('active')
+                    ->label('مفعّل')
+                    ->default(true)
+                    ->helperText('المطفأة لا تظهر للزبون في صفحة الدفع ولا في شحن المحفظة، ويرفضها الخادم.'),
             ])->columns(2),
 
             Forms\Components\Section::make('بيانات التحويل')
@@ -135,6 +144,8 @@ class PaymentAccountResource extends Resource
                     ->label('الطريقة')
                     ->badge()
                     ->formatStateUsing(fn (string $state) => PaymentAccount::METHODS[$state] ?? $state),
+
+                Tables\Columns\TextColumn::make('display_name')->label('الاسم الظاهر')->placeholder('الافتراضي')->toggleable(),
 
                 Tables\Columns\TextColumn::make('holder_name')->label('صاحب الحساب')->searchable(),
 

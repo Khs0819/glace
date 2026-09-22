@@ -15,6 +15,10 @@ beforeEach(fn () => fakePublicDisk());
 // ─── payment accounts ───────────────────────────────────────────────────────
 
 it('serves the shop payment accounts in the storefront shape', function () {
+    // The counter methods are listed too now; this is about a transfer
+    // account's shape, so only that one is left in the table.
+    PaymentAccount::query()->delete();
+
     Illuminate\Support\Facades\Storage::disk('public')->put('payment-accounts/bop-qr.png', 'png');
 
     PaymentAccount::create([
@@ -42,6 +46,8 @@ it('serves the shop payment accounts in the storefront shape', function () {
 });
 
 it('omits bankName for a wallet rather than sending it empty', function () {
+    PaymentAccount::query()->delete();
+
     PaymentAccount::create([
         'method'        => 'jawwal-manual',
         'holder_name'   => 'جلاسيه الأمير',
@@ -59,7 +65,9 @@ it('hides an account the dashboard has switched off', function () {
         'primary_label' => 'y', 'primary_value' => 'z', 'active' => false,
     ]);
 
-    test()->getJson('/api/payment-accounts')->assertOk()->assertJsonCount(0);
+    $methods = array_column(test()->getJson('/api/payment-accounts')->assertOk()->json(), 'method');
+
+    expect($methods)->not->toContain('palpay');
 });
 
 // ─── FAQs ───────────────────────────────────────────────────────────────────

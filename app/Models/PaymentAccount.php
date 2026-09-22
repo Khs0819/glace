@@ -72,6 +72,23 @@ class PaymentAccount extends Model
         return $methods;
     }
 
+    /**
+     * How the storefront treats this method.
+     *
+     *   transfer — the customer sends money to the account on this row and
+     *              uploads proof; the account details are the point.
+     *   gateway  — automatic Jawwal Pay: charged through the gateway.
+     *   counter  — cash or card, taken at the till.
+     */
+    public function type(): string
+    {
+        return match (true) {
+            $this->isTransferDestination() => 'transfer',
+            $this->method === 'jawwal'     => 'gateway',
+            default                        => 'counter',
+        };
+    }
+
     /** Methods the customer transfers to; the rest are taken at the counter. */
     public function isTransferDestination(): bool
     {
@@ -79,7 +96,7 @@ class PaymentAccount extends Model
     }
 
     protected $fillable = [
-        'method', 'qr_image', 'holder_name', 'bank_name', 'account_number',
+        'method', 'display_name', 'qr_image', 'holder_name', 'bank_name', 'account_number',
         'primary_label', 'primary_value', 'secondary_label', 'secondary_value',
         'sort_order', 'active',
     ];

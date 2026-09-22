@@ -27,7 +27,17 @@ class TopUpRequestRequest extends FormRequest
     {
         return [
             'amount' => ['required', 'numeric', 'min:1', 'max:' . (float) config('storefront.limits.max_topup', 500)],
-            'method' => ['required', Rule::in(TopUpRequest::METHODS)],
+            'method' => [
+                'required',
+                Rule::in(TopUpRequest::METHODS),
+                // Hidden from the wallet page when switched off; refused here
+                // for a client that shows it anyway.
+                function (string $attribute, mixed $value, \Closure $fail) {
+                    if (is_string($value) && ! \App\Models\PaymentAccount::methodEnabled($value)) {
+                        $fail('طريقة الشحن غير متاحة حالياً');
+                    }
+                },
+            ],
 
             // Type and size are checked properly in ReceiptStorage, which
             // sniffs the file rather than trusting its declared type. `file` is

@@ -198,7 +198,9 @@ class TopUpRequestResource extends Resource
                     ->form([
                         Forms\Components\Textarea::make('note')
                             ->label('سبب الرفض')
+                            ->helperText('يظهر للزبون في صفحة المحفظة كما تكتبه.')
                             ->required()
+                            ->maxLength(500)
                             ->rows(2),
                     ])
                     ->visible(fn (TopUpRequest $record) => $record->pending() && ! $record->alreadyCredited())

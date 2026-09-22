@@ -20,18 +20,28 @@ class ContentController extends Controller
     /** Where the shop is paid, for the manual-transfer methods (handoff 13). */
     public function paymentAccounts(): JsonResponse
     {
+        /*
+         * Every method the shop has switched on, and nothing it has switched
+         * off. The storefront builds its payment options from this list — a
+         * method missing here is a method the customer is not shown — so the
+         * «مفعّل» switch in the dashboard is what decides it.
+         *
+         * Only the transfer destinations carry account details. Cash, card and
+         * automatic Jawwal Pay are listed so they can be shown or hidden, but
+         * a card reader has no account number, and sending the placeholder
+         * text from its row would put that text on the customer's screen.
+         */
         $accounts = PaymentAccount::where('active', true)
-            // Transfer destinations only. Cash, card and automatic Jawwal Pay
-            // have rows too — that is how the shop switches them on and off —
-            // but they are not accounts a customer sends money to, and a card
-            // reader listed beside a bank account is a customer looking for an
-            // account number that does not exist. Which methods are on is
-            // reported by GET /store/status as `paymentMethods`.
-            ->whereIn('method', Order::RECEIPT_METHODS)
+            ->whereIn('method', array_keys(PaymentAccount::METHODS))
             ->orderBy('sort_order')
             ->get()
-            ->map(fn (PaymentAccount $account) => array_filter([
-                'method'         => $account->method,
+            ->map(fn (PaymentAccount $account) => array_filter(array_merge([
+                'method'      => $account->method,
+                // Set in the dashboard; absent means the storefront uses its
+                // own label for the method.
+                'displayName' => $account->display_name,
+                'type'        => $account->type(),
+            ], $account->isTransferDestination() ? [
                 'qrImage'        => $account->qrImageUrl(),
                 'holderName'     => $account->holder_name,
                 // Only banks have one; handoff 13 says to omit it for wallets
@@ -41,10 +51,9 @@ class ContentController extends Controller
                 'primaryValue'   => $account->primary_value,
                 'secondaryLabel' => $account->secondary_label,
                 'secondaryValue' => $account->secondary_value,
-                // The account the customer transfers into. It is entered on its
-                // own field in the dashboard and was never sent until now.
+                // The account the customer transfers into.
                 'accountNumber'  => $account->account_number,
-            ], static fn ($value) => $value !== null && $value !== ''));
+            ] : []), static fn ($value) => $value !== null && $value !== ''));
 
         return response()->json($accounts->values());
     }
