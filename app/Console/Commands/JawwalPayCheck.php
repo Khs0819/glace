@@ -50,6 +50,12 @@ class JawwalPayCheck extends Command
             ['secret', $config['secret'] ? str_repeat('•', 8) : '(missing)'],
             ['hash_algo', $config['hash_algo'] ?? 'sha512'],
             ['hash_sort', $config['hash_sort'] ?? 'value'],
+            // Shown because pinning them is how a 1004 gets fixed: without
+            // these on screen there is no way to tell whether the values found
+            // by jawwalpay:probe actually reached the app.
+            ['hash_mode', $config['hash_mode'] ?? 'hmac'],
+            ['hash_case', $config['hash_case'] ?? 'lower'],
+            ['hash_exclude', ($config['hash_exclude'] ?? '') ?: '(signs everything)'],
         ]);
 
         if (! $client->configured()) {
