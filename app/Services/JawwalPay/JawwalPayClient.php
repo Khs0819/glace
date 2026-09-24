@@ -92,6 +92,9 @@ class JawwalPayClient
                     ? $this->config['hash_exclude']
                     : explode(',', (string) ($this->config['hash_exclude'] ?? '')),
             )),
+            (string) ($this->config['hash_layout'] ?? 'values'),
+            (string) ($this->config['hash_separator'] ?? ''),
+            (string) ($this->config['hash_encoding'] ?? 'hex'),
         );
     }
 

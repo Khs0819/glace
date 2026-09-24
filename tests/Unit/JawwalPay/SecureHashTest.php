@@ -114,3 +114,28 @@ it('leaves out the fields the gateway does not sign', function () {
     expect($skipsLang->canonicalize($payload))->toBe('44393232930329')
         ->and($signsAll->canonicalize($payload))->toBe('44393232930329EN');
 });
+
+it('can sign key=value pairs, joined however the gateway wants', function () {
+    $payload = ['msgId' => '44393232930329', 'lang' => 'EN'];
+
+    $pairs = new SecureHash('secret', 'sha512', 'key', 'hmac', 'lower', [], 'pairs', '&');
+
+    expect($pairs->canonicalize($payload))->toBe('lang=EN&msgId=44393232930329');
+});
+
+it('keeps the value ordering when it signs pairs', function () {
+    $payload = ['msgId' => '44393232930329', 'lang' => 'EN'];
+
+    // Values sort as 44393232930329 · EN, and the keys ride along with them.
+    $pairs = new SecureHash('secret', 'sha512', 'value', 'hmac', 'lower', [], 'pairs', '|');
+
+    expect($pairs->canonicalize($payload))->toBe('msgId=44393232930329|lang=EN');
+});
+
+it('can hand back the digest in base64 instead of hex', function () {
+    $hex    = new SecureHash('secret');
+    $base64 = new SecureHash('secret', 'sha512', 'value', 'hmac', 'lower', [], 'values', '', 'base64');
+
+    expect($base64->for(['amount' => '5']))
+        ->toBe(base64_encode(hex2bin($hex->for(['amount' => '5']))));
+});

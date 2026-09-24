@@ -168,6 +168,12 @@ return [
         // "lang" is the one gateways of this family most often exclude.
         'hash_exclude' => env('JAWWALPAY_HASH_EXCLUDE', ''),
 
+        // The wider shapes `jawwalpay:probe --wide` searches: values alone or
+        // key=value pairs, what joins them, and hex or base64 output.
+        'hash_layout'    => env('JAWWALPAY_HASH_LAYOUT', 'values'),    // values|pairs
+        'hash_separator' => env('JAWWALPAY_HASH_SEPARATOR', ''),       // '' | & | |
+        'hash_encoding'  => env('JAWWALPAY_HASH_ENCODING', 'hex'),     // hex|base64
+
         'log' => (bool) env('JAWWALPAY_LOG', true),
     ],
 

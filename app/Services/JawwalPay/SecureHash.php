@@ -27,6 +27,9 @@ class SecureHash
     /** How the secret is combined with the canonical string. */
     public const MODES = ['hmac', 'append', 'prepend'];
 
+    /** Values alone, or key=value pairs — both are common in this family. */
+    public const LAYOUTS = ['values', 'pairs'];
+
     /**
      * @param  array<int, string>  $exclude  keys left out of the signed string
      */
@@ -37,6 +40,9 @@ class SecureHash
         private readonly string $mode = 'hmac',
         private readonly string $case = 'lower',
         private readonly array $exclude = [],
+        private readonly string $layout = 'values',
+        private readonly string $separator = '',
+        private readonly string $encoding = 'hex',
     ) {}
 
     /**
@@ -50,11 +56,15 @@ class SecureHash
         // built on a plain digest of the string with the secret glued to one
         // end. Which one this deployment needs is settled by jawwalpay:probe
         // against the live gateway, then pinned in .env.
-        $digest = match ($this->mode) {
-            'append'  => hash($this->algo, $canonical . $this->secret),
-            'prepend' => hash($this->algo, $this->secret . $canonical),
-            default   => hash_hmac($this->algo, $canonical, $this->secret),
+        $raw = match ($this->mode) {
+            'append'  => hash($this->algo, $canonical . $this->secret, true),
+            'prepend' => hash($this->algo, $this->secret . $canonical, true),
+            default   => hash_hmac($this->algo, $canonical, $this->secret, true),
         };
+
+        // Hex is what the guide prints; base64 is what several gateways on the
+        // same platform expect, and the two are the same digest either way.
+        $digest = $this->encoding === 'base64' ? base64_encode($raw) : bin2hex($raw);
 
         return $this->case === 'upper' ? strtoupper($digest) : $digest;
     }
@@ -89,10 +99,45 @@ class SecureHash
         // SORT_STRING, not PHP's default: the values are numeric strings, and a
         // default sort() compares them as numbers — which puts "500" before
         // "00970598251590" and produces a string the gateway will not accept.
-        $this->sort === 'key'
-            ? ksort($values, SORT_STRING)
-            : sort($values, SORT_STRING);
+        if ($this->sort === 'key') {
+            ksort($values, SORT_STRING);
+        } else {
+            // Sorting by value loses the keys, so it is done on a copy when the
+            // layout needs them back.
+            $sorted = $values;
+            sort($sorted, SORT_STRING);
+            $values = $this->layout === 'pairs'
+                ? $this->reorderByValue($values, $sorted)
+                : $sorted;
+        }
 
-        return implode('', $values);
+        $parts = $this->layout === 'pairs'
+            ? array_map(static fn ($key, $value) => "{$key}={$value}", array_keys($values), $values)
+            : array_values($values);
+
+        return implode($this->separator, $parts);
+    }
+
+    /**
+     * Put the key => value map back in the order its values sorted into.
+     *
+     * @param  array<string, string>  $values
+     * @param  array<int, string>  $sorted
+     * @return array<string, string>
+     */
+    private function reorderByValue(array $values, array $sorted): array
+    {
+        $ordered = [];
+
+        foreach ($sorted as $value) {
+            $key = array_search($value, $values, true);
+
+            if ($key !== false) {
+                $ordered[$key] = $value;
+                unset($values[$key]);
+            }
+        }
+
+        return $ordered;
     }
 }
