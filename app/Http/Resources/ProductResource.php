@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Models\Addon;
 use App\Support\MediaUrl;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -29,8 +30,19 @@ class ProductResource extends JsonResource
             $base['description'] = $this->description;
         }
 
-        if ($this->relationLoaded('addons') && $this->addons->isNotEmpty()) {
-            $base['addons'] = AddonResource::collection($this->addons);
+        if ($this->relationLoaded('addons')) {
+            // Scoops are addons underneath, but the storefront draws them as
+            // their own control beside the flavours. Listing them here too
+            // would put every flavour on the page twice.
+            $addons = $this->addons->reject(fn ($addon) => $addon->isScoop());
+
+            if ($addons->isNotEmpty()) {
+                $base['addons'] = AddonResource::collection($addons->values());
+            }
+
+            if ($scoops = $this->extraScoop()) {
+                $base['extraScoop'] = $scoops;
+            }
         }
 
         if ($this->kind === 'builder') {
@@ -38,6 +50,45 @@ class ProductResource extends JsonResource
         }
 
         return array_merge($base, $this->flatListFields());
+    }
+
+    /**
+     * The two flavour lists for "أضف بوظة", or null when this product does not
+     * offer one.
+     *
+     * Absent, not empty: the storefront draws the control only when the field
+     * is there, so a product with nothing available must not send the key at
+     * all. Unavailable flavours still travel inside a list that has something
+     * available, so the customer sees them greyed rather than missing.
+     *
+     * @return array<string, array<int, array<string, mixed>>>|null
+     */
+    private function extraScoop(): ?array
+    {
+        $scoops = $this->addons->filter(fn ($addon) => $addon->isScoop());
+
+        if ($scoops->isEmpty() || $scoops->every(fn ($addon) => ! $addon->available)) {
+            return null;
+        }
+
+        $families = [];
+
+        foreach (array_keys(Addon::SCOOP_FAMILIES) as $family) {
+            $inFamily = $scoops->where('scoop_family', $family)->values();
+
+            if ($inFamily->isEmpty()) {
+                continue;
+            }
+
+            $families[$family] = $inFamily->map(fn ($addon) => [
+                'id'        => $addon->slug,
+                'label'     => $addon->label,
+                'price'     => (float) $addon->price,
+                'available' => (bool) $addon->available,
+            ])->all();
+        }
+
+        return $families === [] ? null : $families;
     }
 
     private function builderFields(): array

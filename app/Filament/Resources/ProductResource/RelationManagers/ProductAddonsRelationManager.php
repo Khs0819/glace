@@ -8,6 +8,7 @@ use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Validation\Rules\Unique;
 
 class ProductAddonsRelationManager extends RelationManager
@@ -55,6 +56,9 @@ class ProductAddonsRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table
+            // Scoops live on their own tab; they are addons underneath, and
+            // without this they would be listed and edited in two places.
+            ->modifyQueryUsing(fn (Builder $query) => $query->whereNull('scoop_family'))
             ->columns([
                 Tables\Columns\TextColumn::make('slug')->label('المعرف'),
                 Tables\Columns\TextColumn::make('label')->label('الاسم'),
