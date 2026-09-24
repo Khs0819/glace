@@ -109,11 +109,11 @@ class JawwalPayCheck extends Command
             ));
             $this->line('  desc: ' . $response->description());
             $this->newLine();
-            $this->line('  If this reads as an invalid secure hash, the guide\'s §3 is ambiguous.');
-            $this->line('  Try the other ordering, then the other digest:');
-            $this->line('    php artisan jawwalpay:check --sort=key');
-            $this->line('    php artisan jawwalpay:check --algo=sha256');
-            $this->line('  Whichever succeeds, pin it in .env as JAWWALPAY_HASH_SORT / JAWWALPAY_HASH_ALGO.');
+            $this->line('  If this reads as an invalid secure hash (1004), the guide\'s §3 is');
+            $this->line('  ambiguous and the shape has to be found against the gateway itself:');
+            $this->line('    php artisan jawwalpay:probe');
+            $this->line('  It tries every combination on get_balance — read-only, nothing is');
+            $this->line('  charged — and prints the .env lines for whichever one is accepted.');
 
             return self::FAILURE;
         }

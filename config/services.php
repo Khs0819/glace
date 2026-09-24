@@ -158,6 +158,16 @@ return [
         'hash_algo' => env('JAWWALPAY_HASH_ALGO', 'sha512'),
         'hash_sort' => env('JAWWALPAY_HASH_SORT', 'value'), // value|key
 
+        // How the secret meets the string, and the case of the hex. Production
+        // refused every request with "Bad SecureHash" (1004) under the guide's
+        // own shape, so these exist to be settled by `jawwalpay:probe`.
+        'hash_mode' => env('JAWWALPAY_HASH_MODE', 'hmac'),  // hmac|append|prepend
+        'hash_case' => env('JAWWALPAY_HASH_CASE', 'lower'), // lower|upper
+
+        // Fields left out of the signed string. Empty signs everything sent;
+        // "lang" is the one gateways of this family most often exclude.
+        'hash_exclude' => env('JAWWALPAY_HASH_EXCLUDE', ''),
+
         'log' => (bool) env('JAWWALPAY_LOG', true),
     ],
 

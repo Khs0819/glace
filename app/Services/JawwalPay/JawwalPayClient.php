@@ -84,6 +84,14 @@ class JawwalPayClient
             (string) ($this->config['secret'] ?? ''),
             (string) ($this->config['hash_algo'] ?? 'sha512'),
             (string) ($this->config['hash_sort'] ?? 'value'),
+            (string) ($this->config['hash_mode'] ?? 'hmac'),
+            (string) ($this->config['hash_case'] ?? 'lower'),
+            array_filter(array_map(
+                'trim',
+                is_array($this->config['hash_exclude'] ?? null)
+                    ? $this->config['hash_exclude']
+                    : explode(',', (string) ($this->config['hash_exclude'] ?? '')),
+            )),
         );
     }
 

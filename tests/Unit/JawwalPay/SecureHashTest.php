@@ -81,3 +81,36 @@ it('does not match the digest the guide prints for that example', function () {
         . '2cdb565a88363850fdd3a697c8c0ec017bc900d47ee55852ce2f3afbf1cc1040'
     );
 });
+
+it('signs with the secret as an HMAC key by default', function () {
+    $hash = new SecureHash('secret', 'sha512', 'value');
+
+    expect($hash->for(['amount' => '5']))->toBe(hash_hmac('sha512', '5', 'secret'));
+});
+
+it('glues the secret to the string when the gateway wants a plain digest', function () {
+    // Not what the guide says, but gateways in this family are built both ways
+    // and production refused every HMAC shape with 1004.
+    expect((new SecureHash('secret', 'sha256', 'value', 'append'))->for(['amount' => '5']))
+        ->toBe(hash('sha256', '5secret'));
+
+    expect((new SecureHash('secret', 'sha256', 'value', 'prepend'))->for(['amount' => '5']))
+        ->toBe(hash('sha256', 'secret5'));
+});
+
+it('sends upper-case hex when asked for it', function () {
+    $lower = (new SecureHash('secret'))->for(['amount' => '5']);
+    $upper = (new SecureHash('secret', 'sha512', 'value', 'hmac', 'upper'))->for(['amount' => '5']);
+
+    expect($upper)->toBe(strtoupper($lower))->not->toBe($lower);
+});
+
+it('leaves out the fields the gateway does not sign', function () {
+    $signsAll  = new SecureHash('secret');
+    $skipsLang = new SecureHash('secret', 'sha512', 'value', 'hmac', 'lower', ['lang']);
+
+    $payload = ['msgId' => '44393232930329', 'lang' => 'EN'];
+
+    expect($skipsLang->canonicalize($payload))->toBe('44393232930329')
+        ->and($signsAll->canonicalize($payload))->toBe('44393232930329EN');
+});

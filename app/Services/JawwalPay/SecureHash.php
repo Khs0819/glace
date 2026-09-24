@@ -24,10 +24,19 @@ namespace App\Services\JawwalPay;
  */
 class SecureHash
 {
+    /** How the secret is combined with the canonical string. */
+    public const MODES = ['hmac', 'append', 'prepend'];
+
+    /**
+     * @param  array<int, string>  $exclude  keys left out of the signed string
+     */
     public function __construct(
         private readonly string $secret,
         private readonly string $algo = 'sha512',
         private readonly string $sort = 'value',
+        private readonly string $mode = 'hmac',
+        private readonly string $case = 'lower',
+        private readonly array $exclude = [],
     ) {}
 
     /**
@@ -35,7 +44,19 @@ class SecureHash
      */
     public function for(array $payload): string
     {
-        return hash_hmac($this->algo, $this->canonicalize($payload), $this->secret);
+        $canonical = $this->canonicalize($payload);
+
+        // "HMAC secret" in the guide, but gateways in this family are also
+        // built on a plain digest of the string with the secret glued to one
+        // end. Which one this deployment needs is settled by jawwalpay:probe
+        // against the live gateway, then pinned in .env.
+        $digest = match ($this->mode) {
+            'append'  => hash($this->algo, $canonical . $this->secret),
+            'prepend' => hash($this->algo, $this->secret . $canonical),
+            default   => hash_hmac($this->algo, $canonical, $this->secret),
+        };
+
+        return $this->case === 'upper' ? strtoupper($digest) : $digest;
     }
 
     /**
@@ -52,6 +73,13 @@ class SecureHash
             // secureHash is never part of its own input, and omitted optional
             // params must not contribute an empty slot to the string.
             if ($key === 'secureHash' || $value === null || $value === '') {
+                continue;
+            }
+
+            // Some gateways of this family sign the business fields only and
+            // leave the envelope out — `lang` is the usual one. Which is true
+            // here is settled by jawwalpay:probe, not by reading.
+            if (in_array($key, $this->exclude, true)) {
                 continue;
             }
 
