@@ -174,6 +174,10 @@ return [
         'hash_separator' => env('JAWWALPAY_HASH_SEPARATOR', ''),       // '' | & | |
         'hash_encoding'  => env('JAWWALPAY_HASH_ENCODING', 'hex'),     // hex|base64
 
+        // Whether the issued key is signing material as written, or an
+        // encoding of the bytes that are.
+        'hash_key_form'  => env('JAWWALPAY_HASH_KEY_FORM', 'raw'),     // raw|base64|hex
+
         'log' => (bool) env('JAWWALPAY_LOG', true),
     ],
 

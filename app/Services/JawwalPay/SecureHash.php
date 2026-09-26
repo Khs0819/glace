@@ -31,6 +31,16 @@ class SecureHash
     public const LAYOUTS = ['values', 'pairs'];
 
     /**
+     * How the issued key becomes signing material.
+     *
+     * A key handed over as base64 or hex is often meant as the bytes it
+     * encodes, not as the characters it is written with. Signing with the
+     * text when the gateway signs with the bytes fails every request, and
+     * looks exactly like a wrong key.
+     */
+    public const KEY_FORMS = ['raw', 'base64', 'hex'];
+
+    /**
      * @param  array<int, string>  $exclude  keys left out of the signed string
      */
     public function __construct(
@@ -43,7 +53,26 @@ class SecureHash
         private readonly string $layout = 'values',
         private readonly string $separator = '',
         private readonly string $encoding = 'hex',
+        private readonly string $keyForm = 'raw',
     ) {}
+
+    /** The secret as signing material, decoded when it is an encoding. */
+    public function key(): string
+    {
+        if ($this->keyForm === 'base64') {
+            $decoded = base64_decode($this->secret, true);
+
+            return $decoded === false ? $this->secret : $decoded;
+        }
+
+        if ($this->keyForm === 'hex' && preg_match('/^[0-9a-f]+$/i', $this->secret) && strlen($this->secret) % 2 === 0) {
+            $decoded = hex2bin($this->secret);
+
+            return $decoded === false ? $this->secret : $decoded;
+        }
+
+        return $this->secret;
+    }
 
     /**
      * @param  array<string, scalar|null>  $payload  request body without secureHash
@@ -56,10 +85,12 @@ class SecureHash
         // built on a plain digest of the string with the secret glued to one
         // end. Which one this deployment needs is settled by jawwalpay:probe
         // against the live gateway, then pinned in .env.
+        $key = $this->key();
+
         $raw = match ($this->mode) {
-            'append'  => hash($this->algo, $canonical . $this->secret, true),
-            'prepend' => hash($this->algo, $this->secret . $canonical, true),
-            default   => hash_hmac($this->algo, $canonical, $this->secret, true),
+            'append'  => hash($this->algo, $canonical . $key, true),
+            'prepend' => hash($this->algo, $key . $canonical, true),
+            default   => hash_hmac($this->algo, $canonical, $key, true),
         };
 
         // Hex is what the guide prints; base64 is what several gateways on the

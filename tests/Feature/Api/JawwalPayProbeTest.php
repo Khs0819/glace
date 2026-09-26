@@ -22,11 +22,13 @@ function gatewayAccepting(
     string $layout = 'values',
     string $separator = '',
     string $encoding = 'hex',
+    string $keyForm = 'raw',
+    string $secret = 'hmac-secret',
 ): void {
     fakeJawwalPay([
-        BALANCE_URL => function (Request $request) use ($algo, $sort, $mode, $case, $exclude, $layout, $separator, $encoding) {
+        BALANCE_URL => function (Request $request) use ($algo, $sort, $mode, $case, $exclude, $layout, $separator, $encoding, $keyForm, $secret) {
             $body     = $request->data();
-            $expected = (new SecureHash('hmac-secret', $algo, $sort, $mode, $case, $exclude, $layout, $separator, $encoding))->for($body);
+            $expected = (new SecureHash($secret, $algo, $sort, $mode, $case, $exclude, $layout, $separator, $encoding, $keyForm))->for($body);
 
             return Http::response(jawwalEnvelope(
                 hash_equals($expected, (string) ($body['secureHash'] ?? '')) ? '00' : '1004',
@@ -126,4 +128,30 @@ it('sends one request per distinct signature, not per combination', function () 
         ->count();
 
     expect($balanceCalls)->toBeLessThan(300)->toBeGreaterThan(10);
+});
+
+it('finds a gateway that signs with the bytes the key encodes, not its text', function () {
+    // A key handed over as base64 usually stands for the 32 bytes inside it.
+    // Signing with the characters instead fails every request and reads
+    // exactly like a wrong key.
+    $secret = base64_encode(random_bytes(32));
+
+    gatewayAccepting('sha256', 'value', 'hmac', 'lower', [], 'values', '', 'hex', 'base64', $secret);
+    config(['services.jawwalpay.secret' => $secret]);
+
+    $this->artisan('jawwalpay:probe --algos=sha256')
+        ->expectsOutputToContain('key=base64')
+        ->expectsOutputToContain('JAWWALPAY_HASH_KEY_FORM=base64')
+        ->assertSuccessful();
+});
+
+it('does not try to decode a key that is plainly text', function () {
+    gatewayAccepting('sha512', 'value', 'hmac', 'lower');
+    config(['services.jawwalpay.secret' => 'hmac-secret']);
+
+    // "hmac-secret" is neither base64 nor hex, so there is one key form to
+    // try and the run says so rather than pretending it searched more.
+    $this->artisan('jawwalpay:probe --algos=sha512')
+        ->expectsOutputToContain('key=raw')
+        ->assertSuccessful();
 });

@@ -104,6 +104,7 @@ class JawwalPayProbe extends Command
                 $shape['exclude'] === '' ? 'all' : '-' . $shape['exclude'],
                 $shape['layout'] . ($shape['separator'] === '' ? '' : ' "' . $shape['separator'] . '"'),
                 $shape['encoding'],
+                $shape['keyForm'],
                 $outcome,
             ];
 
@@ -140,6 +141,7 @@ class JawwalPayProbe extends Command
             'hash_layout'    => $shape['layout'],
             'hash_separator' => $shape['separator'],
             'hash_encoding'  => $shape['encoding'],
+            'hash_key_form'  => $shape['keyForm'],
         ]));
     }
 
@@ -167,22 +169,27 @@ class JawwalPayProbe extends Command
         $separators = $wide ? ['', '&', '|'] : [''];
         $encodings  = $wide ? ['hex', 'base64'] : ['hex'];
 
-        foreach (['', 'lang'] as $exclude) {
-            foreach (['value', 'key'] as $sort) {
-                foreach ($algos as $algo) {
-                    foreach (SecureHash::MODES as $mode) {
-                        foreach (['lower', 'upper'] as $case) {
-                            foreach ($layouts as $layout) {
-                                foreach ($separators as $separator) {
-                                    foreach ($encodings as $encoding) {
-                                        // Upper-casing base64 does not produce
-                                        // another encoding of the digest, it
-                                        // produces a different (wrong) string.
-                                        if ($encoding === 'base64' && $case === 'upper') {
-                                            continue;
-                                        }
+        foreach ($this->keyForms() as $keyForm) {
+            foreach (['', 'lang'] as $exclude) {
+                foreach (['value', 'key'] as $sort) {
+                    foreach ($algos as $algo) {
+                        foreach (SecureHash::MODES as $mode) {
+                            foreach (['lower', 'upper'] as $case) {
+                                foreach ($layouts as $layout) {
+                                    foreach ($separators as $separator) {
+                                        foreach ($encodings as $encoding) {
+                                            // Upper-casing base64 does not produce
+                                            // another encoding of the digest, it
+                                            // produces a different (wrong) string.
+                                            if ($encoding === 'base64' && $case === 'upper') {
+                                                continue;
+                                            }
 
-                                        yield compact('exclude', 'sort', 'algo', 'mode', 'case', 'layout', 'separator', 'encoding');
+                                            yield compact(
+                                                'exclude', 'sort', 'algo', 'mode', 'case',
+                                                'layout', 'separator', 'encoding', 'keyForm',
+                                            );
+                                        }
                                     }
                                 }
                             }
@@ -194,13 +201,42 @@ class JawwalPayProbe extends Command
     }
 
     /**
+     * The key as written, and as the bytes it might be an encoding of.
+     *
+     * A key issued as base64 or hex often stands for the bytes rather than
+     * the characters, and signing with the wrong one of the two fails every
+     * request while looking exactly like a wrong key. Only forms this
+     * particular secret could really be are tried: anything else would be one
+     * more call to their gateway for nothing.
+     *
+     * @return array<int, string>
+     */
+    private function keyForms(): array
+    {
+        $secret = (string) config('services.jawwalpay.secret');
+        $forms  = ['raw'];
+
+        $decoded = base64_decode($secret, true);
+
+        if ($decoded !== false && $decoded !== '' && base64_encode($decoded) === $secret) {
+            $forms[] = 'base64';
+        }
+
+        if (preg_match('/^[0-9a-f]+$/i', $secret) === 1 && strlen($secret) % 2 === 0) {
+            $forms[] = 'hex';
+        }
+
+        return $forms;
+    }
+
+    /**
      * @param  array<int, array<int, string>>  $rows
      * @param  array<int, array<string, string>>  $found
      */
     private function report(array $rows, array $found, ?JawwalPayClient $client = null): int
     {
         $this->newLine();
-        $this->table(['sort', 'algo', 'mode', 'case', 'signs', 'layout', 'out', 'gateway answer'], $rows);
+        $this->table(['sort', 'algo', 'mode', 'case', 'signs', 'layout', 'out', 'key', 'gateway answer'], $rows);
         $this->line('  ' . count($rows) . ' distinct signatures tried.');
 
         if ($found === []) {
@@ -217,6 +253,10 @@ class JawwalPayProbe extends Command
                 $this->line('    php artisan jawwalpay:probe --wide');
                 $this->line('  which also tries key=value layouts, separators and base64 output.');
             }
+            $this->line('  The key was tried as written' . (count($this->keyForms()) > 1
+                ? ' and as the bytes it encodes.'
+                : '; it is not valid base64 or hex, so it can only be text.'));
+            $this->newLine();
             $this->line('  Send Ahmad Amro exactly this, and ask which half differs on their side:');
 
             if ($client) {
@@ -241,6 +281,7 @@ class JawwalPayProbe extends Command
         $this->newLine();
         $this->components->info('Accepted: sort=' . $first['sort'] . ' algo=' . $first['algo']
             . ' mode=' . $first['mode'] . ' case=' . $first['case']
+            . ' key=' . $first['keyForm']
             . ($first['exclude'] === '' ? '' : ' (not signing: ' . $first['exclude'] . ')'));
         $this->line('  Pin it in .env, then `php artisan config:clear`:');
         $this->newLine();
@@ -252,6 +293,7 @@ class JawwalPayProbe extends Command
         $this->line('    JAWWALPAY_HASH_LAYOUT=' . $first['layout']);
         $this->line('    JAWWALPAY_HASH_SEPARATOR=' . $first['separator']);
         $this->line('    JAWWALPAY_HASH_ENCODING=' . $first['encoding']);
+        $this->line('    JAWWALPAY_HASH_KEY_FORM=' . $first['keyForm']);
         $this->newLine();
         $this->line('  Then: php artisan jawwalpay:check');
 

@@ -139,3 +139,23 @@ it('can hand back the digest in base64 instead of hex', function () {
     expect($base64->for(['amount' => '5']))
         ->toBe(base64_encode(hex2bin($hex->for(['amount' => '5']))));
 });
+
+it('can sign with the bytes a base64 key encodes', function () {
+    $bytes  = random_bytes(32);
+    $secret = base64_encode($bytes);
+
+    $asText  = new SecureHash($secret);
+    $asBytes = new SecureHash($secret, 'sha512', 'value', 'hmac', 'lower', [], 'values', '', 'hex', 'base64');
+
+    expect($asBytes->key())->toBe($bytes)
+        ->and($asText->key())->toBe($secret)
+        ->and($asBytes->for(['amount' => '5']))->toBe(hash_hmac('sha512', '5', $bytes))
+        ->and($asBytes->for(['amount' => '5']))->not->toBe($asText->for(['amount' => '5']));
+});
+
+it('keeps a key that is not really an encoding as it was written', function () {
+    // "hmac-secret" is not valid base64; decoding it would sign with rubbish.
+    $hash = new SecureHash('hmac-secret', 'sha512', 'value', 'hmac', 'lower', [], 'values', '', 'hex', 'base64');
+
+    expect($hash->key())->toBe('hmac-secret');
+});

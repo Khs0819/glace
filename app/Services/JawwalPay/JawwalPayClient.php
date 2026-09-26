@@ -95,6 +95,7 @@ class JawwalPayClient
             (string) ($this->config['hash_layout'] ?? 'values'),
             (string) ($this->config['hash_separator'] ?? ''),
             (string) ($this->config['hash_encoding'] ?? 'hex'),
+            (string) ($this->config['hash_key_form'] ?? 'raw'),
         );
     }
 
