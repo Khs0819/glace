@@ -169,8 +169,20 @@ class JawwalPayProbe extends Command
         $separators = $wide ? ['', '&', '|'] : [''];
         $encodings  = $wide ? ['hex', 'base64'] : ['hex'];
 
+        /*
+         * What is signed: everything, everything but `lang`, or everything but
+         * `msgId`.
+         *
+         * The provider's own Postman collection carries one hash across three
+         * different payloads, and a different hash on the one request whose
+         * `lang` differs — which is what signing `lang` alone would look like.
+         * It may just be a pasted value, but it costs two more signatures to
+         * find out.
+         */
+        $excluded = $wide ? ['', 'lang', 'msgId'] : ['', 'lang'];
+
         foreach ($this->keyForms() as $keyForm) {
-            foreach (['', 'lang'] as $exclude) {
+            foreach ($excluded as $exclude) {
                 foreach (['value', 'key'] as $sort) {
                     foreach ($algos as $algo) {
                         foreach (SecureHash::MODES as $mode) {
@@ -182,6 +194,13 @@ class JawwalPayProbe extends Command
                                             // another encoding of the digest, it
                                             // produces a different (wrong) string.
                                             if ($encoding === 'base64' && $case === 'upper') {
+                                                continue;
+                                            }
+
+                                            // A key sorted in among the values has
+                                            // no sensible key= name to print, so
+                                            // that mode belongs to bare values.
+                                            if ($mode === 'value' && $layout !== 'values') {
                                                 continue;
                                             }
 

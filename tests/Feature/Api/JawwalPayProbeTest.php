@@ -119,15 +119,16 @@ it('sends one request per distinct signature, not per combination', function () 
 
     $this->artisan('jawwalpay:probe --wide --all');
 
-    // 2 exclusions × 2 orderings × 2 digests × 3 modes × 2 cases × 2 layouts
-    // × 3 separators × 2 encodings is 576 combinations, but a two-field
-    // payload cannot produce anything like that many different strings — and
-    // each repeat would be one more call to somebody else's gateway.
+    // Three field sets × two orderings × two digests × four modes × two cases
+    // × two layouts × three separators × two encodings is over a thousand
+    // combinations, but a two-field payload cannot produce anything like that
+    // many different strings — and each repeat would be one more call to
+    // somebody else's gateway.
     $balanceCalls = collect(Http::recorded())
         ->filter(fn (array $pair) => str_contains($pair[0]->url(), 'get_balance'))
         ->count();
 
-    expect($balanceCalls)->toBeLessThan(300)->toBeGreaterThan(10);
+    expect($balanceCalls)->toBeLessThan(500)->toBeGreaterThan(10);
 });
 
 it('finds a gateway that signs with the bytes the key encodes, not its text', function () {
@@ -153,5 +154,32 @@ it('does not try to decode a key that is plainly text', function () {
     // try and the run says so rather than pretending it searched more.
     $this->artisan('jawwalpay:probe --algos=sha512')
         ->expectsOutputToContain('key=raw')
+        ->assertSuccessful();
+});
+
+it('finds a gateway that signs one field only', function () {
+    // Signing `lang` alone would explain the provider's own collection, where
+    // three payloads share a hash and only the one with a different `lang`
+    // differs.
+    gatewayAccepting('sha256', 'value', 'hmac', 'lower', ['msgId']);
+
+    $this->artisan('jawwalpay:probe --wide --algos=sha256')
+        ->expectsOutputToContain('JAWWALPAY_HASH_EXCLUDE=msgId')
+        ->assertSuccessful();
+});
+
+it('finds a gateway that hashes the key as one of the values', function () {
+    // A key that sorts *between* the two fields, so the string it makes is
+    // one neither "glue it on the front" nor "glue it on the end" can reach.
+    // (A key sorting first or last is the same digest as prepend or append,
+    // and the probe rightly reports whichever of the two it tried first.)
+    $secret = '9sorts-between';
+
+    gatewayAccepting('sha512', 'value', 'value', 'lower', [], 'values', '', 'hex', 'raw', $secret);
+    config(['services.jawwalpay.secret' => $secret]);
+
+    $this->artisan('jawwalpay:probe --algos=sha512')
+        ->expectsOutputToContain('mode=value')
+        ->expectsOutputToContain('JAWWALPAY_HASH_MODE=value')
         ->assertSuccessful();
 });

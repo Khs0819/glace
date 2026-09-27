@@ -159,3 +159,12 @@ it('keeps a key that is not really an encoding as it was written', function () {
 
     expect($hash->key())->toBe('hmac-secret');
 });
+
+it('can put the key among the values instead of applying it to them', function () {
+    $hash = new SecureHash('zzz-key', 'sha512', 'value', 'value');
+
+    // Sorted in like any other value, then plainly hashed — the key is in the
+    // string, so it is not also used as an HMAC key.
+    expect($hash->canonicalize(['msgId' => '123', 'lang' => 'EN']))->toBe('123ENzzz-key')
+        ->and($hash->for(['msgId' => '123', 'lang' => 'EN']))->toBe(hash('sha512', '123ENzzz-key'));
+});

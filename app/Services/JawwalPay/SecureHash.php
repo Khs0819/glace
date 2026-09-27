@@ -24,8 +24,15 @@ namespace App\Services\JawwalPay;
  */
 class SecureHash
 {
-    /** How the secret is combined with the canonical string. */
-    public const MODES = ['hmac', 'append', 'prepend'];
+    /**
+     * How the secret is combined with the canonical string.
+     *
+     * `value` is the odd one: the key is not applied to the string at all, it
+     * takes part in it — sorted among the values like any other field, then
+     * plainly hashed. Several gateways on this platform sign that way, and it
+     * is indistinguishable from the rest until the gateway is asked.
+     */
+    public const MODES = ['hmac', 'append', 'prepend', 'value'];
 
     /** Values alone, or key=value pairs — both are common in this family. */
     public const LAYOUTS = ['values', 'pairs'];
@@ -90,6 +97,9 @@ class SecureHash
         $raw = match ($this->mode) {
             'append'  => hash($this->algo, $canonical . $key, true),
             'prepend' => hash($this->algo, $key . $canonical, true),
+            // The key is already inside the string; hashing it again as a key
+            // would be signing it twice.
+            'value'   => hash($this->algo, $canonical, true),
             default   => hash_hmac($this->algo, $canonical, $key, true),
         };
 
@@ -125,6 +135,11 @@ class SecureHash
             }
 
             $values[$key] = is_bool($value) ? ($value ? 'true' : 'false') : (string) $value;
+        }
+
+        // Sorted in among the fields, not applied to the result.
+        if ($this->mode === 'value') {
+            $values['secureHashKey'] = $this->key();
         }
 
         // SORT_STRING, not PHP's default: the values are numeric strings, and a
