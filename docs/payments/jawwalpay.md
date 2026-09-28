@@ -142,6 +142,10 @@ JAWWALPAY_PASSWORD=
 JAWWALPAY_SECRET=                                  # مفتاح HMAC لـ secureHash
 JAWWALPAY_HASH_ALGO=sha512
 JAWWALPAY_HASH_SORT=value
+JAWWALPAY_HASH_MODE=hmac
+JAWWALPAY_HASH_CASE=lower
+JAWWALPAY_HASH_EXCLUDE=
+JAWWALPAY_HASH_INCLUDE_TOKEN=true                  # التوكن ضمن النص الموقّع
 ```
 
 الاختبارات لا تصل إلى البوابة الحقيقية إطلاقاً: `phpunit.xml` يُفرغ بيانات
@@ -151,7 +155,15 @@ JAWWALPAY_HASH_SORT=value
 
 ## 7. ⚠ ما يجب التحقق منه قبل التشغيل
 
-### أ. `secureHash` غير مُتحقَّق منه بعد — الأهم
+### أ. ✅ `secureHash` — مُتحقَّق منه على الإنتاج (2026-09-28)
+
+**الصيغة المعتمدة:** ترتيب لغوي لـ[قيم المعاملات + `X-Auth-Token`] → دمج → HMAC-SHA512 بالمفتاح → hex صغيرة، وكل الحقول تُوقَّع.
+
+التوكن هو ما كان ناقصاً: الدليل لا يذكره في §3، وأكّده أحمد عمرو. التفاصيل وما جُرّب قبلها في [`jawwalpay-securehash.md`](./jawwalpay-securehash.md).
+
+ما يلي كان تحليل المشكلة قبل حلّها:
+
+### أ-قديم. `secureHash` غير مُتحقَّق منه بعد
 
 الفقرة §3 من الدليل تناقض نفسها:
 
