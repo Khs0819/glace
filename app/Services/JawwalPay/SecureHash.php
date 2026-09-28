@@ -61,6 +61,7 @@ class SecureHash
         private readonly string $separator = '',
         private readonly string $encoding = 'hex',
         private readonly string $keyForm = 'raw',
+        private readonly bool $includeToken = true,
     ) {}
 
     /** The secret as signing material, decoded when it is an encoding. */
@@ -83,10 +84,11 @@ class SecureHash
 
     /**
      * @param  array<string, scalar|null>  $payload  request body without secureHash
+     * @param  ?string  $token  the session token, when it is signed with them
      */
-    public function for(array $payload): string
+    public function for(array $payload, ?string $token = null): string
     {
-        $canonical = $this->canonicalize($payload);
+        $canonical = $this->canonicalize($payload, $token);
 
         // "HMAC secret" in the guide, but gateways in this family are also
         // built on a plain digest of the string with the secret glued to one
@@ -116,9 +118,22 @@ class SecureHash
      *
      * @param  array<string, scalar|null>  $payload
      */
-    public function canonicalize(array $payload): string
+    public function canonicalize(array $payload, ?string $token = null): string
     {
         $values = [];
+
+        /*
+         * The X-Auth-Token, sorted in among the parameter values.
+         *
+         * Not in the guide — §3 lists the request parameters and nothing else.
+         * It comes from Jawwal Pay's own integration lead (2026-09-28): "برتب
+         * ال x-auth token مع ال parameter values، بعدها بعمل hashing sha512
+         * using secret key". A signature over the same fields without it is
+         * refused as 1004, which is what production had been answering.
+         */
+        if ($this->includeToken && $token !== null && $token !== '') {
+            $values['xAuthToken'] = $token;
+        }
 
         foreach ($payload as $key => $value) {
             // secureHash is never part of its own input, and omitted optional

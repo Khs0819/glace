@@ -168,3 +168,27 @@ it('can put the key among the values instead of applying it to them', function (
     expect($hash->canonicalize(['msgId' => '123', 'lang' => 'EN']))->toBe('123ENzzz-key')
         ->and($hash->for(['msgId' => '123', 'lang' => 'EN']))->toBe(hash('sha512', '123ENzzz-key'));
 });
+
+it('signs the session token together with the parameter values', function () {
+    // Jawwal Pay's integration lead, 2026-09-28: the X-Auth-Token is sorted in
+    // with the values before hashing. The guide's §3 never mentions it, and a
+    // signature without it is what production kept refusing as 1004.
+    $hash = new SecureHash('secret');
+
+    expect($hash->canonicalize(['msgId' => '123', 'lang' => 'EN'], 'eyJhbGciOi'))
+        ->toBe('123ENeyJhbGciOi')
+        ->and($hash->for(['msgId' => '123', 'lang' => 'EN'], 'eyJhbGciOi'))
+        ->toBe(hash_hmac('sha512', '123ENeyJhbGciOi', 'secret'));
+});
+
+it('leaves the token out when the gateway does not sign it', function () {
+    $without = new SecureHash('secret', 'sha512', 'value', 'hmac', 'lower', [], 'values', '', 'hex', 'raw', false);
+
+    expect($without->canonicalize(['msgId' => '123', 'lang' => 'EN'], 'eyJhbGciOi'))->toBe('123EN');
+});
+
+it('signs the same string when no token is in hand', function () {
+    $hash = new SecureHash('secret');
+
+    expect($hash->canonicalize(['msgId' => '123', 'lang' => 'EN']))->toBe('123EN');
+});

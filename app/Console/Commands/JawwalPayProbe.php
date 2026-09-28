@@ -75,7 +75,10 @@ class JawwalPayProbe extends Command
 
         foreach ($this->shapes() as $shape) {
             $attempt     = $this->clientFor($config, $shape);
-            $fingerprint = $attempt->secureHash()->for(['msgId' => '11112222333344', 'lang' => 'AR']);
+            $fingerprint = $attempt->secureHash()->for(
+                ['msgId' => '11112222333344', 'lang' => 'AR'],
+                'fingerprint-token',
+            );
 
             $attempts[$fingerprint] ??= [$shape, $attempt];
         }
@@ -105,6 +108,7 @@ class JawwalPayProbe extends Command
                 $shape['layout'] . ($shape['separator'] === '' ? '' : ' "' . $shape['separator'] . '"'),
                 $shape['encoding'],
                 $shape['keyForm'],
+                $shape['token'] ? 'token' : '—',
                 $outcome,
             ];
 
@@ -142,6 +146,7 @@ class JawwalPayProbe extends Command
             'hash_separator' => $shape['separator'],
             'hash_encoding'  => $shape['encoding'],
             'hash_key_form'  => $shape['keyForm'],
+            'hash_include_token' => $shape['token'],
         ]));
     }
 
@@ -181,7 +186,15 @@ class JawwalPayProbe extends Command
          */
         $excluded = $wide ? ['', 'lang', 'msgId'] : ['', 'lang'];
 
-        foreach ($this->keyForms() as $keyForm) {
+        /*
+         * With the session token in the signed string, and without.
+         *
+         * Their integration lead says it belongs there; the guide does not
+         * mention it. Both are tried, the documented shape second, so a run
+         * that finds nothing has ruled out the same ground either way.
+         */
+        foreach ([true, false] as $token) {
+            foreach ($this->keyForms() as $keyForm) {
             foreach ($excluded as $exclude) {
                 foreach (['value', 'key'] as $sort) {
                     foreach ($algos as $algo) {
@@ -206,7 +219,7 @@ class JawwalPayProbe extends Command
 
                                             yield compact(
                                                 'exclude', 'sort', 'algo', 'mode', 'case',
-                                                'layout', 'separator', 'encoding', 'keyForm',
+                                                'layout', 'separator', 'encoding', 'keyForm', 'token',
                                             );
                                         }
                                     }
@@ -216,6 +229,7 @@ class JawwalPayProbe extends Command
                     }
                 }
             }
+        }
         }
     }
 
@@ -255,7 +269,7 @@ class JawwalPayProbe extends Command
     private function report(array $rows, array $found, ?JawwalPayClient $client = null): int
     {
         $this->newLine();
-        $this->table(['sort', 'algo', 'mode', 'case', 'signs', 'layout', 'out', 'key', 'gateway answer'], $rows);
+        $this->table(['sort', 'algo', 'mode', 'case', 'signs', 'layout', 'out', 'key', 'signs token', 'gateway answer'], $rows);
         $this->line('  ' . count($rows) . ' distinct signatures tried.');
 
         if ($found === []) {
@@ -301,6 +315,7 @@ class JawwalPayProbe extends Command
         $this->components->info('Accepted: sort=' . $first['sort'] . ' algo=' . $first['algo']
             . ' mode=' . $first['mode'] . ' case=' . $first['case']
             . ' key=' . $first['keyForm']
+            . ($first['token'] ? ' +token' : '')
             . ($first['exclude'] === '' ? '' : ' (not signing: ' . $first['exclude'] . ')'));
         $this->line('  Pin it in .env, then `php artisan config:clear`:');
         $this->newLine();
@@ -313,6 +328,7 @@ class JawwalPayProbe extends Command
         $this->line('    JAWWALPAY_HASH_SEPARATOR=' . $first['separator']);
         $this->line('    JAWWALPAY_HASH_ENCODING=' . $first['encoding']);
         $this->line('    JAWWALPAY_HASH_KEY_FORM=' . $first['keyForm']);
+        $this->line('    JAWWALPAY_HASH_INCLUDE_TOKEN=' . ($first['token'] ? 'true' : 'false'));
         $this->newLine();
         $this->line('  Then: php artisan jawwalpay:check');
 

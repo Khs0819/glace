@@ -56,6 +56,7 @@ class JawwalPayCheck extends Command
             ['hash_mode', $config['hash_mode'] ?? 'hmac'],
             ['hash_case', $config['hash_case'] ?? 'lower'],
             ['hash_exclude', ($config['hash_exclude'] ?? '') ?: '(signs everything)'],
+            ['hash_include_token', ($config['hash_include_token'] ?? true) ? 'yes' : 'no'],
         ]);
 
         if (! $client->configured()) {

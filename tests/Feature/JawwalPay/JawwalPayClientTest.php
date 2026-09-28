@@ -125,8 +125,12 @@ it('signs every call and sends the token in x-auth-token', function () {
         $signed = $body;
         unset($signed['secureHash']);
 
+        // The token is signed with the values, so the signature has to be
+        // checked against the very token this request carried.
+        $token = $request->header('X-Auth-Token')[0] ?? null;
+
         return $request->hasHeader('X-Auth-Token')
-            && $body['secureHash'] === $client->secureHash()->for($signed)
+            && $body['secureHash'] === $client->secureHash()->for($signed, $token)
             && $body['receiver'] === '00970599002286'   // normalised before signing
             && $body['amount'] === '50'
             && $body['lang'] === 'AR';

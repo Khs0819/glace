@@ -24,11 +24,14 @@ function gatewayAccepting(
     string $encoding = 'hex',
     string $keyForm = 'raw',
     string $secret = 'hmac-secret',
+    bool $withToken = true,
 ): void {
     fakeJawwalPay([
-        BALANCE_URL => function (Request $request) use ($algo, $sort, $mode, $case, $exclude, $layout, $separator, $encoding, $keyForm, $secret) {
+        BALANCE_URL => function (Request $request) use ($algo, $sort, $mode, $case, $exclude, $layout, $separator, $encoding, $keyForm, $secret, $withToken) {
             $body     = $request->data();
-            $expected = (new SecureHash($secret, $algo, $sort, $mode, $case, $exclude, $layout, $separator, $encoding, $keyForm))->for($body);
+            $token    = $request->header('X-Auth-Token')[0] ?? null;
+            $expected = (new SecureHash($secret, $algo, $sort, $mode, $case, $exclude, $layout, $separator, $encoding, $keyForm, $withToken))
+                ->for($body, $token);
 
             return Http::response(jawwalEnvelope(
                 hash_equals($expected, (string) ($body['secureHash'] ?? '')) ? '00' : '1004',
@@ -119,16 +122,17 @@ it('sends one request per distinct signature, not per combination', function () 
 
     $this->artisan('jawwalpay:probe --wide --all');
 
-    // Three field sets × two orderings × two digests × four modes × two cases
-    // × two layouts × three separators × two encodings is over a thousand
-    // combinations, but a two-field payload cannot produce anything like that
-    // many different strings — and each repeat would be one more call to
-    // somebody else's gateway.
+    // Two token choices × three field sets × two orderings × two digests ×
+    // four modes × two cases × two layouts × three separators × two encodings
+    // is over two thousand combinations, and a two-field payload cannot make
+    // anything like that many different strings. The run says how many it
+    // will really send before it sends the first one, because each repeat
+    // would be one more call to somebody else's gateway.
     $balanceCalls = collect(Http::recorded())
         ->filter(fn (array $pair) => str_contains($pair[0]->url(), 'get_balance'))
         ->count();
 
-    expect($balanceCalls)->toBeLessThan(500)->toBeGreaterThan(10);
+    expect($balanceCalls)->toBeLessThan(1000)->toBeGreaterThan(10);
 });
 
 it('finds a gateway that signs with the bytes the key encodes, not its text', function () {
@@ -181,5 +185,23 @@ it('finds a gateway that hashes the key as one of the values', function () {
     $this->artisan('jawwalpay:probe --algos=sha512')
         ->expectsOutputToContain('mode=value')
         ->expectsOutputToContain('JAWWALPAY_HASH_MODE=value')
+        ->assertSuccessful();
+});
+
+it('finds a gateway that signs the session token with the values', function () {
+    // The shape Jawwal Pay described on 2026-09-28.
+    gatewayAccepting('sha512', 'value', 'hmac', 'lower');
+
+    $this->artisan('jawwalpay:probe --algos=sha512')
+        ->expectsOutputToContain('+token')
+        ->expectsOutputToContain('JAWWALPAY_HASH_INCLUDE_TOKEN=true')
+        ->assertSuccessful();
+});
+
+it('still finds a gateway that signs the values alone', function () {
+    gatewayAccepting('sha512', 'value', 'hmac', 'lower', [], 'values', '', 'hex', 'raw', 'hmac-secret', withToken: false);
+
+    $this->artisan('jawwalpay:probe --algos=sha512')
+        ->expectsOutputToContain('JAWWALPAY_HASH_INCLUDE_TOKEN=false')
         ->assertSuccessful();
 });

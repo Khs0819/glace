@@ -178,6 +178,11 @@ return [
         // encoding of the bytes that are.
         'hash_key_form'  => env('JAWWALPAY_HASH_KEY_FORM', 'raw'),     // raw|base64|hex
 
+        // The X-Auth-Token sorted in with the parameter values before hashing.
+        // Not in the guide; it is how their integration lead says the gateway
+        // builds the string, and signing without it is refused as 1004.
+        'hash_include_token' => (bool) env('JAWWALPAY_HASH_INCLUDE_TOKEN', true),
+
         'log' => (bool) env('JAWWALPAY_LOG', true),
     ],
 

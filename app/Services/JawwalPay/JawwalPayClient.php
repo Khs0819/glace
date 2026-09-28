@@ -96,6 +96,7 @@ class JawwalPayClient
             (string) ($this->config['hash_separator'] ?? ''),
             (string) ($this->config['hash_encoding'] ?? 'hex'),
             (string) ($this->config['hash_key_form'] ?? 'raw'),
+            (bool) ($this->config['hash_include_token'] ?? true),
         );
     }
 
@@ -247,8 +248,9 @@ class JawwalPayClient
     {
         $this->assertConfigured();
 
-        $body  = $this->body($payload);
+        // The token first: it is part of what gets signed.
         $token = $this->token();
+        $body  = $this->body($payload, $token);
 
         $response = $this->dispatch($endpoint, fn (PendingRequest $request) => $request
             ->withHeaders(['X-Auth-Token' => $token])
@@ -275,7 +277,7 @@ class JawwalPayClient
      * @param  array<string, scalar|null>  $payload
      * @return array<string, scalar>
      */
-    public function body(array $payload): array
+    public function body(array $payload, ?string $token = null): array
     {
         $payload['msgId'] ??= self::newMessageId();
         $payload['lang']  ??= (string) ($this->config['lang'] ?? 'AR');
@@ -284,7 +286,14 @@ class JawwalPayClient
         // hashed string, so it is removed before the hash is taken.
         $payload = array_filter($payload, static fn ($value) => $value !== null && $value !== '');
 
-        $payload['secureHash'] = $this->secureHash()->for($payload);
+        // Signed with the session token when the gateway expects it there; a
+        // caller that did not pass one (the probe printing a sample) gets the
+        // cached token rather than a signature of a different shape.
+        if ($token === null && ($this->config['hash_include_token'] ?? true)) {
+            $token = $this->token();
+        }
+
+        $payload['secureHash'] = $this->secureHash()->for($payload, $token);
 
         return $payload;
     }
