@@ -130,6 +130,10 @@ GET  /api/orders/{id}?token=…     ← حالة الطلب
 أرقام المحافظ تظهر مقنّعة دائماً (`009705••••2286`)، ورمز التحقق الخام لا
 يُخزَّن ولا يُسجَّل في أي مكان.
 
+**السجلّ** — كل نداء يُكتب كاملاً: الـ JSON المُرسَل والـ JSON العائد ورمز الخطأ
+ووصفه، ومعها سطر لكل رفض يقع **قبل** النداء. طريقة القراءة وجدول الأسباب في
+[`jawwalpay-logs.md`](./jawwalpay-logs.md).
+
 ---
 
 ## 6. الإعداد
@@ -146,6 +150,9 @@ JAWWALPAY_HASH_MODE=hmac
 JAWWALPAY_HASH_CASE=lower
 JAWWALPAY_HASH_EXCLUDE=
 JAWWALPAY_HASH_INCLUDE_TOKEN=true                  # التوكن ضمن النص الموقّع
+
+JAWWALPAY_LOG=true                                 # الطلب والرد كاملين في السجل
+JAWWALPAY_LOG_CHANNEL=                             # اتركه فارغاً، أو jawwalpay لملف خاص
 ```
 
 الاختبارات لا تصل إلى البوابة الحقيقية إطلاقاً: `phpunit.xml` يُفرغ بيانات

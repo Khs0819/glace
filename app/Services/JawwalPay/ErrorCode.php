@@ -104,6 +104,11 @@ class ErrorCode
         '180' => ['Service Blocked', 'الخدمة محظورة'],
         '181' => ['Max Number Of Activation Code Reached', 'تم بلوغ الحد الأقصى لرموز التفعيل'],
         '182' => ['Activation Code Already Requested', 'تم طلب رمز التفعيل مسبقاً'],
+
+        // Not in the guide's table at all — read off production, where every
+        // signed call came back with it for two days. Without it here the log
+        // reads "حدث خطأ غير متوقع" for the one failure whose cause is known.
+        '1004' => ['Bad SecureHash', 'توقيع الطلب (secureHash) غير مقبول لدى البوابة'],
     ];
 
     /** The vendor's English name for a code — for the dashboard and logs. */

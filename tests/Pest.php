@@ -55,6 +55,25 @@ function fakePublicDisk(): void
     ]);
 }
 
+/**
+ * Everything written to the log from here on, in order.
+ *
+ * A Collection rather than an array so the listener can keep pushing into the
+ * same object the test is holding.
+ *
+ * @return Illuminate\Support\Collection<int, Illuminate\Log\Events\MessageLogged>
+ */
+function captureLogs(): Illuminate\Support\Collection
+{
+    $lines = collect();
+
+    Illuminate\Support\Facades\Log::listen(
+        fn (Illuminate\Log\Events\MessageLogged $event) => $lines->push($event),
+    );
+
+    return $lines;
+}
+
 /*
 |--------------------------------------------------------------------------
 | Jawwal Pay

@@ -166,3 +166,145 @@ it('spends the code once, so a replayed order cannot charge twice', function () 
 
     expect(Order::count())->toBe(1);
 });
+
+// ─── what the log says afterwards ───────────────────────────────────────────
+//
+// A payment that failed on the shop's own server left `send_otp — errorCd 00`
+// and then a bare `POST /api/orders 422`, and the shop could not tell from that
+// whether Jawwal Pay had refused the charge or whether we had refused it before
+// asking. These cover the difference.
+
+/** The gateway, answering, with its logging left on as it is in production. */
+function loggingGateway(array $endpoints): void
+{
+    liveGateway($endpoints);
+
+    config(['services.jawwalpay.log' => true]);
+    app()->forgetInstance(JawwalPayClient::class);
+}
+
+it('logs the request and the reply of every gateway call, in full', function () {
+    $logged = captureLogs();
+
+    loggingGateway([GATEWAY_OTP => Http::response(jawwalEnvelope())]);
+
+    sendGatewayCode(24)->assertOk();
+
+    $line = $logged->firstWhere('message', 'jawwalpay.v1/business/send_otp');
+
+    expect($line)->not->toBeNull()
+        ->and($line->context['errorCd'])->toBe('00')
+        // The whole body as it went out — the amount, the message id, and the
+        // signature Jawwal Pay's own support asks to see.
+        ->and($line->context['request'])->toContain('"amount":"24"')
+        ->and($line->context['request'])->toContain('"secureHash"')
+        // …and the whole envelope that came back, error code and description.
+        ->and($line->context['response'])->toContain('"errorCd":"00"')
+        ->and($line->context['response'])->toContain('"desc"');
+});
+
+it('keeps the customer\'s code out of the log, in every form', function () {
+    $logged = captureLogs();
+
+    loggingGateway([
+        GATEWAY_OTP => Http::response(jawwalEnvelope()),
+        GATEWAY_MFP => Http::response(jawwalEnvelope()),
+    ]);
+
+    sendGatewayCode()->assertOk();
+    test()->post('/api/orders', jawwalPayload(), $this->headers)->assertCreated();
+
+    $charge = $logged->firstWhere('message', 'jawwalpay.v1/business/MFP');
+
+    // Hashed or not, it is the credential that moves the money.
+    expect($charge->context['request'])->toContain('"otp":"[otp]"')
+        ->and($charge->context['request'])->not->toContain('123456')
+        ->and($charge->context['request'])->not->toContain(JawwalPayClient::hashOtp('123456'))
+        // And the wallet is masked, here as everywhere else.
+        ->and($charge->context['request'])->toContain('009705••••2286');
+});
+
+it('names the gate that refused, when the gateway was never asked', function () {
+    $logged = captureLogs();
+
+    loggingGateway([GATEWAY_MFP => Http::response(jawwalEnvelope())]);
+
+    // No code was ever requested, so this is refused before any call.
+    test()->post('/api/orders', jawwalPayload(), $this->headers)->assertStatus(422);
+
+    $line = $logged->firstWhere('message', 'jawwalpay.checkout.refused');
+
+    expect($line->context['reason'])->toBe('no-otp-requested')
+        // …and no charge was attempted, which the log has to show as plainly.
+        ->and($logged->firstWhere('message', 'jawwalpay.checkout.charging'))->toBeNull();
+});
+
+it('prints both amounts when the cart changed under the code', function () {
+    $logged = captureLogs();
+
+    loggingGateway([GATEWAY_OTP => Http::response(jawwalEnvelope())]);
+
+    sendGatewayCode(99)->assertOk();
+
+    test()->post('/api/orders', jawwalPayload(), $this->headers)->assertStatus(422);
+
+    $line = $logged->firstWhere('message', 'jawwalpay.checkout.refused');
+
+    // In agorot, both of them, so the mismatch reads off the line itself.
+    expect($line->context['reason'])->toBe('amount-changed')
+        ->and($line->context['approved'])->toBe(9900)
+        ->and($line->context['total'])->toBe(2400);
+});
+
+it('records a charge the gateway turned down against the order', function () {
+    $logged = captureLogs();
+
+    loggingGateway([
+        GATEWAY_OTP => Http::response(jawwalEnvelope()),
+        GATEWAY_MFP => Http::response(jawwalEnvelope('89')),   // Invalid OTP
+    ]);
+
+    sendGatewayCode()->assertOk();
+    test()->post('/api/orders', jawwalPayload(), $this->headers)->assertStatus(422);
+
+    $line = $logged->firstWhere('message', 'jawwalpay.checkout.refused');
+
+    expect($logged->firstWhere('message', 'jawwalpay.checkout.charging'))->not->toBeNull()
+        ->and($line->context['reason'])->toBe('gateway-refused')
+        ->and($line->context['errorCd'])->toBe('89')
+        ->and($line->context['order'])->toBe(Order::sole()->reference);
+});
+
+it('says so when the code never reached validation', function () {
+    $logged = captureLogs();
+
+    loggingGateway([GATEWAY_OTP => Http::response(jawwalEnvelope())]);
+
+    sendGatewayCode()->assertOk();
+
+    // Letters where digits belong: refused by the request, before any service
+    // runs — the one refusal nothing else was able to record.
+    test()->post('/api/orders', jawwalPayload(['jawwalCode' => 'abcdef']), $this->headers)
+        ->assertStatus(422);
+
+    $line = $logged->firstWhere('message', 'jawwalpay.checkout.refused');
+
+    expect($line->context['reason'])->toBe('request-validation')
+        ->and($line->context['errors'])->toHaveKey('jawwalCode');
+});
+
+it('accepts a gateway code that is not six digits long', function () {
+    // Six is the length of *our* OTP. Jawwal Pay's code is Jawwal Pay's, and
+    // refusing it here would refuse a code they had just sent and would accept.
+    loggingGateway([
+        GATEWAY_OTP => Http::response(jawwalEnvelope()),
+        GATEWAY_MFP => Http::response(jawwalEnvelope()),
+    ]);
+
+    sendGatewayCode()->assertOk();
+
+    test()->post('/api/orders', jawwalPayload(['jawwalCode' => '12345']), $this->headers)
+        ->assertCreated();
+
+    expect(Order::sole()->isPaid())->toBeTrue();
+});

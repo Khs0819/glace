@@ -89,7 +89,10 @@ it('has arabic wording and an english label for every documented code', function
             ->and(ErrorCode::label($code))->not->toBe('Unknown Error');
     }
 
-    expect(ErrorCode::options())->toHaveCount(72)
+    // The guide's §4 table, plus 1004 — which is not in it, and which
+    // production answered every signed call with for two days.
+    expect(ErrorCode::options())->toHaveCount(73)
+        ->and(ErrorCode::known('1004'))->toBeTrue()
         ->and(ErrorCode::known('00'))->toBeTrue()
         ->and(ErrorCode::known('999'))->toBeFalse();
 });

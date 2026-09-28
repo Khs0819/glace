@@ -73,6 +73,20 @@ return [
             'replace_placeholders' => true,
         ],
 
+        /*
+         * Payments through Jawwal Pay, and nothing else — every request and
+         * reply in full. Off by default so the lines stay in the app log;
+         * set JAWWALPAY_LOG_CHANNEL=jawwalpay when a payment needs following
+         * and the app log is too busy to read.
+         */
+        'jawwalpay' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/jawwalpay.log'),
+            'level' => 'debug',
+            'days' => env('JAWWALPAY_LOG_DAYS', 30),
+            'replace_placeholders' => true,
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),

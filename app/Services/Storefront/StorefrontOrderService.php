@@ -13,6 +13,7 @@ use App\Models\OtpCode;
 use App\Models\Payment;
 use App\Services\Checkout\OrderPaymentService;
 use App\Services\JawwalPay\ErrorCode;
+use App\Services\JawwalPay\GatewayLog;
 use App\Services\JawwalPay\JawwalPayClient;
 use App\Services\JawwalPay\JawwalPayException;
 use App\Services\JawwalPay\MobileNumber;
@@ -288,6 +289,15 @@ class StorefrontOrderService
             'msgId'  => $msgId,
             'amount' => Money::toAgorot($amount),
         ], now()->addMinutes(10));
+
+        // The amount is in agorot, the same unit the refusal lines print, so a
+        // "تغيّرت قيمة الطلب" can be read straight off the two numbers.
+        GatewayLog::write('info', 'jawwalpay.checkout.code-sent', [
+            'wallet' => MobileNumber::mask($wallet),
+            'amount' => Money::toAgorot($amount),
+            'msgId'  => $msgId,
+            'cache'  => config('cache.default'),
+        ]);
     }
 
     // ─── pieces ─────────────────────────────────────────────────────────────
@@ -402,8 +412,9 @@ class StorefrontOrderService
     private function verifyJawwalCode(array $payload, int $total): void
     {
         if (blank($payload['jawwalPhone'] ?? null) || blank($payload['jawwalCode'] ?? null)) {
-            throw ValidationException::withMessages([
-                'jawwalCode' => 'أدخل رمز التأكيد المرسل إلى رقمك',
+            $this->refuseJawwal('missing-code', 'أدخل رمز التأكيد المرسل إلى رقمك', [
+                'wallet' => MobileNumber::mask($payload['jawwalPhone'] ?? null),
+                'total'  => $total,
             ]);
         }
 
@@ -432,10 +443,30 @@ class StorefrontOrderService
         $approved = (int) ($record->payload['amount'] ?? 0);
 
         if ($approved !== $total) {
-            throw ValidationException::withMessages([
-                'jawwalCode' => 'تغيّرت قيمة الطلب — يرجى طلب رمز تأكيد جديد',
+            $this->refuseJawwal('amount-changed', 'تغيّرت قيمة الطلب — يرجى طلب رمز تأكيد جديد', [
+                'wallet'   => MobileNumber::mask($payload['jawwalPhone'] ?? null),
+                'approved' => $approved,
+                'total'    => $total,
             ]);
         }
+    }
+
+    /**
+     * Refuse a Jawwal Pay checkout, and say in the log which gate refused it.
+     *
+     * A 422 on POST /orders used to leave no trace at all. On the server that
+     * read as a `send_otp` that succeeded and then nothing — indistinguishable
+     * from a charge the gateway turned down, which is the one thing the shop
+     * most needs to tell apart. Amounts are in agorot, the unit every check
+     * here compares in.
+     *
+     * @param  array<string, mixed>  $context
+     */
+    private function refuseJawwal(string $reason, string $message, array $context = [], int $status = 422): never
+    {
+        GatewayLog::write('warning', 'jawwalpay.checkout.refused', ['reason' => $reason] + $context);
+
+        throw ValidationException::withMessages(['jawwalCode' => $message])->status($status);
     }
 
     /** Configured, switched on, and therefore able to move real money. */
@@ -461,14 +492,20 @@ class StorefrontOrderService
         $intent = $wallet === null ? null : Cache::get($this->jawwalIntentKey($wallet));
 
         if ($intent === null) {
-            throw ValidationException::withMessages([
-                'jawwalCode' => 'اطلب رمز التأكيد أولاً',
+            $this->refuseJawwal('no-otp-requested', 'اطلب رمز التأكيد أولاً', [
+                'wallet' => MobileNumber::mask($payload['jawwalPhone'] ?? null),
+                'total'  => $total,
+                // A cache that does not outlive one request loses every intent
+                // between send-code and here, and looks exactly like this.
+                'cache'  => config('cache.default'),
             ]);
         }
 
         if ((int) $intent['amount'] !== $total) {
-            throw ValidationException::withMessages([
-                'jawwalCode' => 'تغيّرت قيمة الطلب — يرجى طلب رمز تأكيد جديد',
+            $this->refuseJawwal('amount-changed', 'تغيّرت قيمة الطلب — يرجى طلب رمز تأكيد جديد', [
+                'wallet'   => MobileNumber::mask((string) $wallet),
+                'approved' => (int) $intent['amount'],
+                'total'    => $total,
             ]);
         }
     }
@@ -486,6 +523,15 @@ class StorefrontOrderService
     {
         $wallet = MobileNumber::normalize($payload['jawwalPhone']);
         $intent = Cache::pull($this->jawwalIntentKey((string) $wallet)) ?? [];
+
+        // The line that separates "we asked and they said no" from "we never
+        // asked": everything above this point refuses without a single call.
+        GatewayLog::write('info', 'jawwalpay.checkout.charging', [
+            'order'  => $order->reference,
+            'wallet' => MobileNumber::mask((string) $wallet),
+            'amount' => $order->total,
+            'msgId'  => $intent['msgId'] ?? null,
+        ]);
 
         $order->payments()->create([
             'provider'    => 'jawwalpay',
@@ -505,9 +551,12 @@ class StorefrontOrderService
             // checked the provider's records.
             report($e);
 
-            throw ValidationException::withMessages([
-                'jawwalCode' => 'لم يصلنا ردّ من جوال باي — تواصل مع المحل قبل إعادة المحاولة',
-            ])->status(409);
+            $this->refuseJawwal(
+                'no-answer',
+                'لم يصلنا ردّ من جوال باي — تواصل مع المحل قبل إعادة المحاولة',
+                ['order' => $order->reference, 'error' => $e->getMessage()],
+                status: 409,
+            );
         }
 
         if ($payment->isPaid()) {
@@ -522,9 +571,17 @@ class StorefrontOrderService
             'cancelled_at'  => now(),
         ]);
 
-        throw ValidationException::withMessages([
-            'jawwalCode' => ErrorCode::customerMessage($payment->error_code),
-        ]);
+        // The MFP call logged the full exchange a moment ago; this ties it to
+        // the order that was cancelled because of it.
+        $this->refuseJawwal(
+            'gateway-refused',
+            ErrorCode::customerMessage($payment->error_code),
+            [
+                'order'   => $order->reference,
+                'errorCd' => $payment->error_code,
+                'desc'    => $payment->error_description,
+            ],
+        );
     }
 
     private function payFromWallet(Order $order, ?Customer $customer, int $total): void

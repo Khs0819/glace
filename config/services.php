@@ -183,7 +183,15 @@ return [
         // builds the string, and signing without it is refused as 1004.
         'hash_include_token' => (bool) env('JAWWALPAY_HASH_INCLUDE_TOKEN', true),
 
+        // Every call is logged whole: the JSON sent and the JSON returned, so
+        // an error code can be read off the server without a debugger. The
+        // secret, the session token and the customer's code never appear.
         'log' => (bool) env('JAWWALPAY_LOG', true),
+
+        // Empty keeps those lines in the app log, where whoever is watching
+        // the server already looks. `JAWWALPAY_LOG_CHANNEL=jawwalpay` gives
+        // them a file of their own instead — storage/logs/jawwalpay-*.log.
+        'log_channel' => env('JAWWALPAY_LOG_CHANNEL'),
     ],
 
 ];

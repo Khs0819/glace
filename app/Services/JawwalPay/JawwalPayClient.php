@@ -7,7 +7,6 @@ use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Client for the Jawwal Pay Service Bus (merchant guide v1.0).
@@ -127,10 +126,14 @@ class JawwalPayClient
         $token = $response->extra('access_token');
 
         if ($response->failed() || blank($token)) {
-            Log::warning('jawwalpay.login.failed', [
-                'errorCd' => $response->errorCode(),
-                'desc'    => $response->description(),
-                'ref'     => $response->reference(),
+            GatewayLog::write('warning', 'jawwalpay.login.failed', [
+                'errorCd'  => $response->errorCode(),
+                'desc'     => $response->description(),
+                'meaning'  => ErrorCode::message($response->errorCode()),
+                'ref'      => $response->reference(),
+                // No request to show: login carries the credentials in a Basic
+                // auth header and nothing else.
+                'response' => GatewayLog::json(GatewayLog::response($response->raw)),
             ]);
 
             throw new JawwalPayException(
@@ -380,6 +383,14 @@ class JawwalPayClient
     }
 
     /**
+     * One call, in full: what we sent and what came back.
+     *
+     * The summary alone was not enough to answer the shop's question. A
+     * customer was texted a code and then refused at checkout, and `errorCd`
+     * plus `desc` could not say whether the refusal came from the gateway or
+     * from us — so both JSON bodies go in the line, and GatewayLog decides what
+     * is allowed into them.
+     *
      * @param  array<string, scalar>  $body
      */
     private function log(string $endpoint, array $body, JawwalPayResponse $response): void
@@ -388,18 +399,20 @@ class JawwalPayClient
             return;
         }
 
-        $level = $response->successful() ? 'info' : 'warning';
+        $code = $response->errorCode();
 
-        // Everything sensitive is dropped here rather than at the call sites:
-        // the OTP hash is still a credential, and secureHash plus the token
-        // would let anyone reading logs mint their own requests.
-        Log::log($level, 'jawwalpay.' . trim($endpoint, '/'), [
+        GatewayLog::write($response->successful() ? 'info' : 'warning', 'jawwalpay.' . trim($endpoint, '/'), [
+            // Kept at the top so the line still reads at a glance, and so a
+            // msgId can be grepped for without parsing the JSON under it.
             'msgId'    => $body['msgId'] ?? null,
-            'receiver' => isset($body['receiver']) ? MobileNumber::mask((string) $body['receiver']) : null,
-            'amount'   => $body['amount'] ?? $body['transactionAmount'] ?? null,
-            'errorCd'  => $response->errorCode(),
+            'errorCd'  => $code,
             'desc'     => $response->description(),
+            // Their `desc` follows `lang` and can be terse; ours is the same
+            // code in the wording the shop knows it by.
+            'meaning'  => ErrorCode::message($code),
             'ref'      => $response->reference(),
+            'request'  => GatewayLog::json(GatewayLog::request($body)),
+            'response' => GatewayLog::json(GatewayLog::response($response->raw)),
         ]);
     }
 

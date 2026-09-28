@@ -3,6 +3,8 @@
 namespace App\Http\Requests\Storefront;
 
 use App\Models\Order;
+use App\Services\JawwalPay\GatewayLog;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -182,8 +184,32 @@ class StoreStorefrontOrderRequest extends FormRequest
 
             // Automatic Jawwal Pay only.
             'jawwalPhone' => ['nullable', 'string', 'max:20'],
-            'jawwalCode'  => ['nullable', 'string', 'regex:/^\d{6}$/'],
+
+            // Digits, and nothing else said about them. The length used to be
+            // pinned at six, which is *our* OTP's length — with the gateway
+            // live the code is Jawwal Pay's, and a code of theirs that is not
+            // six digits would be refused here without them ever being asked,
+            // for a code they had just sent and consider valid.
+            'jawwalCode'  => ['nullable', 'string', 'regex:/^\d{4,10}$/'],
         ];
+    }
+
+    /**
+     * A 422 here is thrown before any service runs, so nothing else can record
+     * it — and on the automatic Jawwal Pay path that silence costs the most:
+     * the customer has already been texted a code, and the server log shows a
+     * successful `send_otp` followed by a bare 422 with no reason beside it.
+     */
+    protected function failedValidation(Validator $validator): void
+    {
+        if ($this->input('paymentMethod') === 'jawwal') {
+            GatewayLog::write('warning', 'jawwalpay.checkout.refused', [
+                'reason' => 'request-validation',
+                'errors' => $validator->errors()->toArray(),
+            ]);
+        }
+
+        parent::failedValidation($validator);
     }
 
     /** @return array<string, string> */
