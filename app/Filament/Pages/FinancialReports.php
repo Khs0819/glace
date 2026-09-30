@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Services\Reporting\FinancialReport;
+use App\Support\Staff;
 use Carbon\Carbon;
 use Filament\Forms;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -28,6 +29,19 @@ class FinancialReports extends Page implements HasForms
     protected static ?int $navigationSort = 1;
     protected static string $view = 'filament.pages.financial-reports';
     protected static ?string $slug = 'financial-reports';
+
+    /**
+     * The manager's, not the counter's.
+     *
+     * Any period, any month, any year: takings, what was given away, what each
+     * method brought in. The counter closes its own shift from the cashier
+     * screen and sees that shift's numbers there — which is what it needs to
+     * count the drawer, and all of it.
+     */
+    public static function canAccess(): bool
+    {
+        return Staff::isManager();
+    }
 
     public ?string $preset = 'today';
     public ?string $from = null;

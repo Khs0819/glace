@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\ManagerEdits;
 use App\Filament\Resources\MenuCategoryResource\Pages;
 use App\Models\MenuCategory;
 use Filament\Forms;
@@ -12,6 +13,8 @@ use Filament\Tables\Table;
 
 class MenuCategoryResource extends Resource
 {
+    use ManagerEdits;
+
     protected static ?string $model = MenuCategory::class;
     protected static ?string $navigationIcon = 'heroicon-o-squares-2x2';
     protected static ?string $navigationGroup = 'القائمة';

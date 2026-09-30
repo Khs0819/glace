@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\ManagerOnly;
 use App\Filament\Resources\BranchResource\Pages;
 use App\Models\Branch;
 use Filament\Forms;
@@ -12,6 +13,8 @@ use Filament\Tables\Table;
 
 class BranchResource extends Resource
 {
+    use ManagerOnly;
+
     protected static ?string $model = Branch::class;
     protected static ?string $navigationIcon = 'heroicon-o-map-pin';
     protected static ?string $navigationGroup = 'الصفحة الرئيسية';

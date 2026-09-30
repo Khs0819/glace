@@ -2,8 +2,10 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\ManagerOnly;
 use App\Filament\Resources\UserResource\Pages;
 use App\Models\User;
+use App\Support\Staff;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
@@ -33,14 +35,12 @@ class UserResource extends Resource
     protected static ?int $navigationSort = 20;
     protected static ?string $slug = 'staff';
 
-    public static function canViewAny(): bool
-    {
-        return auth()->user()?->isManager() ?? false;
-    }
+    use ManagerOnly;
 
+    /** …and no account deletes itself, or the last way back in. */
     public static function canDelete(Model $record): bool
     {
-        return static::canViewAny()
+        return Staff::isManager()
             && $record->getKey() !== auth()->id()
             && ! static::isLastManager($record);
     }

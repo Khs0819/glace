@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\ManagerOnly;
 use App\Filament\Resources\PaymentAccountResource\Pages;
 use App\Models\Order;
 use App\Models\PaymentAccount;
@@ -33,14 +34,12 @@ class PaymentAccountResource extends Resource
     protected static ?string $slug = 'payment-accounts';
 
     /**
-     * The manager's page. These are the numbers customers send money to: an
-     * accountant has no reason to change one, and a wrong digit sends real
-     * transfers somewhere else.
+     * The manager's page. These are the numbers customers send money to: the
+     * counter has no reason to change one, and a wrong digit sends real
+     * transfers somewhere else — and nobody notices until a customer says they
+     * paid and the shop cannot find it.
      */
-    public static function canViewAny(): bool
-    {
-        return auth()->user()?->isManager() ?? false;
-    }
+    use ManagerOnly;
 
     public static function form(Form $form): Form
     {
@@ -174,8 +173,7 @@ class PaymentAccountResource extends Resource
             ->reorderable('sort_order')
             ->actions([
                 Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make()
-                    ->visible(fn () => auth()->user()->isManager()),
+                Tables\Actions\DeleteAction::make(),
             ])
             ->emptyStateHeading('لا توجد حسابات دفع')
             ->emptyStateDescription('أضف حساب المحل لكل طريقة تحويل يدوي يستخدمها الزبائن.');

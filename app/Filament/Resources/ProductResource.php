@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\ManagerEdits;
 use App\Filament\Resources\ProductResource\Pages;
 use App\Filament\Resources\ProductResource\RelationManagers;
 use App\Models\MenuCategory;
@@ -16,6 +17,8 @@ use Illuminate\Database\Eloquent\Builder;
 
 class ProductResource extends Resource
 {
+    use ManagerEdits;
+
     protected static ?string $model = Product::class;
     protected static ?string $navigationIcon = 'heroicon-o-shopping-bag';
     protected static ?string $navigationGroup = 'القائمة';

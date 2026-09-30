@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\ManagerEdits;
 use App\Filament\Resources\DeliveryZoneResource\Pages;
 use App\Models\DeliveryZone;
 use Filament\Forms;
@@ -17,6 +18,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 class DeliveryZoneResource extends Resource
 {
+    use ManagerEdits;
+
     protected static ?string $model = DeliveryZone::class;
     protected static ?string $navigationIcon = 'heroicon-o-map-pin';
     protected static ?string $navigationGroup = 'الطلبات';

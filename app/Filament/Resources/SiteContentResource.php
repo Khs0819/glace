@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\ManagerOnly;
 use App\Filament\Resources\SiteContentResource\Pages;
 use App\Models\SiteContent;
 use Filament\Forms;
@@ -21,6 +22,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 class SiteContentResource extends Resource
 {
+    use ManagerOnly;
+
     protected static ?string $model = SiteContent::class;
     protected static ?string $navigationIcon = 'heroicon-o-document-text';
     protected static ?string $navigationGroup = 'المحتوى';

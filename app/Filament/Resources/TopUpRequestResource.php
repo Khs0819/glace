@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Support\Staff;
 use App\Filament\Resources\TopUpRequestResource\Pages;
 use App\Models\TopUpRequest;
 use App\Services\Storefront\WalletService;
@@ -56,6 +57,15 @@ class TopUpRequestResource extends Resource
     public static function canEdit(Model $record): bool
     {
         return false;
+    }
+
+    /**
+     * Reviewing a receipt is the counter's daily work; deleting the record of
+     * one is not — it is the only trace that credit was ever handed out.
+     */
+    public static function canDelete(Model $record): bool
+    {
+        return Staff::isManager();
     }
 
     public static function infolist(Infolist $infolist): Infolist

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\ManagerOnly;
 use App\Filament\Resources\FaqResource\Pages;
 use App\Models\Faq;
 use Filament\Forms;
@@ -17,6 +18,8 @@ use Illuminate\Support\Str;
  */
 class FaqResource extends Resource
 {
+    use ManagerOnly;
+
     protected static ?string $model = Faq::class;
     protected static ?string $navigationIcon = 'heroicon-o-question-mark-circle';
     protected static ?string $navigationGroup = 'المحتوى';

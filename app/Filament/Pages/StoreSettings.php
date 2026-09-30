@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Support\Staff;
 use App\Models\StoreSetting;
 use App\Models\User;
 use App\Services\Storefront\StoreHours;
@@ -77,7 +78,7 @@ class StoreSettings extends Page implements HasForms
 
     public function canManage(): bool
     {
-        return auth()->user()?->isManager() ?? false;
+        return Staff::isManager();
     }
 
     /**

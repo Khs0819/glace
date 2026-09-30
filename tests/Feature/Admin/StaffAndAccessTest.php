@@ -20,30 +20,148 @@ use Livewire\Livewire;
  * customers holding a balance.
  */
 
-// ─── manager and accountant ─────────────────────────────────────────────────
+// ─── manager and counter ────────────────────────────────────────────────────
 
-it('keeps payment accounts, staff and shift deletion to the manager', function () {
+/**
+ * Every screen the counter account must not open.
+ *
+ * Grouped by what a mis-tap on each would cost, because that is the reason any
+ * of them is on the list:
+ *
+ *   money     — where customers transfer to, what the shop gives away, and the
+ *               figures for any period anyone cares to ask about
+ *   the shop  — the menu, its prices, the zones, the drivers
+ *   the world — what the website says, and who can sign in at all
+ */
+dataset('manager only', [
+    'payment accounts' => [App\Filament\Resources\PaymentAccountResource::class],
+    'staff'            => [App\Filament\Resources\UserResource::class],
+    'coupons'          => [App\Filament\Resources\CouponResource::class],
+    'branches'         => [App\Filament\Resources\BranchResource::class],
+    'hero slides'      => [App\Filament\Resources\HeroSlideResource::class],
+    'site content'     => [App\Filament\Resources\SiteContentResource::class],
+    'events'           => [App\Filament\Resources\EventResource::class],
+    'faqs'             => [App\Filament\Resources\FaqResource::class],
+    'contacts'         => [App\Filament\Resources\ContactResource::class],
+    'home about'       => [App\Filament\Resources\HomeAboutResource::class],
+    'home why'         => [App\Filament\Resources\HomeWhyGlaceResource::class],
+]);
+
+/** Screens the counter reads all day but does not rewrite. */
+dataset('read only for the counter', [
+    'products'   => [App\Filament\Resources\ProductResource::class],
+    'categories' => [App\Filament\Resources\MenuCategoryResource::class],
+    'flavors'    => [App\Filament\Resources\FlavorResource::class],
+    'addons'     => [App\Filament\Resources\GlobalAddonResource::class],
+    'zones'      => [App\Filament\Resources\DeliveryZoneResource::class],
+    'drivers'    => [App\Filament\Resources\DriverResource::class],
+]);
+
+/** Screens the counter needs to get through a shift. */
+dataset('the counter works here', [
+    'orders'   => [App\Filament\Resources\OrderResource::class],
+    'refunds'  => [App\Filament\Resources\ChangeRefundRequestResource::class],
+    'top-ups'  => [App\Filament\Resources\TopUpRequestResource::class],
+    'customers' => [App\Filament\Resources\CustomerResource::class],
+    'payouts'  => [App\Filament\Resources\DriverPayoutResource::class],
+    'shifts'   => [App\Filament\Resources\CashierShiftResource::class],
+]);
+
+it('closes the sensitive screens to the counter account', function (string $resource) {
+    $this->actingAs(User::factory()->accountant()->create());
+
+    // Not merely refused when clicked — gone from the sidebar, so the counter
+    // never sees a door it cannot open.
+    expect($resource::canViewAny())->toBeFalse();
+
+    $this->get($resource::getUrl('index'))->assertForbidden();
+})->with('manager only');
+
+it('opens every screen to the manager', function (string $resource) {
+    $this->actingAs(User::factory()->create());
+
+    expect($resource::canViewAny())->toBeTrue();
+
+    $this->get($resource::getUrl('index'))->assertSuccessful();
+})->with('manager only');
+
+it('lets the counter read the menu without rewriting it', function (string $resource) {
+    $this->actingAs(User::factory()->accountant()->create());
+
+    expect($resource::canViewAny())->toBeTrue()
+        ->and($resource::canCreate())->toBeFalse();
+
+    $this->get($resource::getUrl('index'))->assertSuccessful();
+})->with('read only for the counter');
+
+it('leaves the counter the screens a shift is run from', function (string $resource) {
+    $this->actingAs(User::factory()->accountant()->create());
+
+    expect($resource::canViewAny())->toBeTrue();
+
+    $this->get($resource::getUrl('index'))->assertSuccessful();
+})->with('the counter works here');
+
+it('keeps shift deletion and the financial reports to the manager', function () {
     $accountant = User::factory()->accountant()->create();
     $shift = CashierShift::create(['user_id' => $accountant->id, 'opened_at' => now(), 'opening_float' => 0]);
 
     $this->actingAs($accountant);
 
-    $this->get(PaymentAccountResource::getUrl('index'))->assertForbidden();
-    $this->get(UserResource::getUrl('index'))->assertForbidden();
+    expect(CashierShiftResource::canDelete($shift))->toBeFalse()
+        ->and(App\Filament\Pages\FinancialReports::canAccess())->toBeFalse();
 
-    expect(CashierShiftResource::canDelete($shift))->toBeFalse();
+    $this->actingAs(User::factory()->create());
+
+    expect(CashierShiftResource::canDelete($shift))->toBeTrue()
+        ->and(App\Filament\Pages\FinancialReports::canAccess())->toBeTrue();
 });
 
-it('lets the manager into all of it', function () {
-    $manager = User::factory()->create();
-    $shift = CashierShift::create(['user_id' => $manager->id, 'opened_at' => now(), 'opening_float' => 0]);
+it('shows a cashier their own drawer counts and nobody else\'s', function () {
+    $mine   = User::factory()->accountant()->create();
+    $theirs = User::factory()->accountant()->create();
 
-    $this->actingAs($manager);
+    $ownShift   = CashierShift::create(['user_id' => $mine->id, 'opened_at' => now(), 'opening_float' => 0]);
+    $otherShift = CashierShift::create(['user_id' => $theirs->id, 'opened_at' => now(), 'opening_float' => 0]);
 
-    $this->get(PaymentAccountResource::getUrl('index'))->assertSuccessful();
-    $this->get(UserResource::getUrl('index'))->assertSuccessful();
+    $this->actingAs($mine);
 
-    expect(CashierShiftResource::canDelete($shift))->toBeTrue();
+    // A shift row is a cash count, and it is one cashier's record.
+    Livewire::test(CashierShiftResource\Pages\ListCashierShifts::class)
+        ->assertCanSeeTableRecords([$ownShift])
+        ->assertCanNotSeeTableRecords([$otherShift]);
+
+    $this->actingAs(User::factory()->create());
+
+    Livewire::test(CashierShiftResource\Pages\ListCashierShifts::class)
+        ->assertCanSeeTableRecords([$ownShift, $otherShift]);
+});
+
+it('will not let the counter hand out wallet credit by hand', function () {
+    $customer = Customer::create(['name' => 'زبون', 'phone' => '0599000003']);
+
+    // The one button in the dashboard that makes money with no order, no
+    // receipt and no transfer behind it.
+    $this->actingAs(User::factory()->accountant()->create());
+
+    Livewire::test(CustomerResource\Pages\ListCustomers::class)
+        ->assertTableActionHidden('adjustWallet', $customer);
+
+    $this->actingAs(User::factory()->create());
+
+    Livewire::test(CustomerResource\Pages\ListCustomers::class)
+        ->assertTableActionVisible('adjustWallet', $customer);
+});
+
+it('leaves the settings page open so anyone can change their own password', function () {
+    $this->actingAs(User::factory()->accountant()->create());
+
+    // The page stays reachable — it is where a cashier changes their own
+    // password — while the shop switches on it stay the manager's, which
+    // StoreHoursTest covers by trying to flip one.
+    expect(App\Filament\Pages\StoreSettings::canAccess())->toBeTrue();
+
+    $this->get(App\Filament\Pages\StoreSettings::getUrl())->assertSuccessful();
 });
 
 it('lets the manager create an accountant account', function () {

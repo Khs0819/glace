@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\ManagerEdits;
 use App\Filament\Resources\FlavorResource\Pages;
 use App\Filament\Resources\FlavorResource\RelationManagers;
 use App\Models\Flavor;
@@ -15,6 +16,8 @@ use Illuminate\Database\Eloquent\Builder;
 
 class FlavorResource extends Resource
 {
+    use ManagerEdits;
+
     protected static ?string $model = Flavor::class;
     protected static ?string $navigationIcon = 'heroicon-o-swatch';
     protected static ?string $navigationGroup = 'القائمة';

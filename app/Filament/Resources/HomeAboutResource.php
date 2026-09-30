@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\ManagerOnly;
 use App\Filament\Resources\HomeAboutResource\Pages;
 use App\Models\HomeAbout;
 use Filament\Forms;
@@ -12,6 +13,8 @@ use Filament\Tables\Table;
 
 class HomeAboutResource extends Resource
 {
+    use ManagerOnly;
+
     protected static ?string $model = HomeAbout::class;
     protected static ?string $navigationIcon = 'heroicon-o-information-circle';
     protected static ?string $navigationGroup = 'الصفحة الرئيسية';

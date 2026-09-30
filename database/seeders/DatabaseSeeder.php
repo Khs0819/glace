@@ -2,22 +2,23 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        User::firstOrCreate(
-            ['email' => 'admin@glace.com'],
-            [
-                'name'     => 'Admin',
-                'password' => Hash::make('admin123456'),
-            ]
-        );
-
+        /*
+         * No account is seeded here any more.
+         *
+         * This used to create admin@glace.com with the password "admin123456",
+         * and `role` defaults to manager — so every install that ran the
+         * seeder to get its menu also published a full-access dashboard login
+         * that anybody could guess. Staff accounts are made deliberately, with
+         * a password that exists only once:
+         *
+         *     php artisan staff:setup
+         */
         $this->call([
             MenuCategorySeeder::class,
             FlavorSeeder::class,

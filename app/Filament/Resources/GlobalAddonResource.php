@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\ManagerEdits;
 use App\Filament\Resources\GlobalAddonResource\Pages;
 use App\Models\Addon;
 use Filament\Forms;
@@ -14,6 +15,8 @@ use Illuminate\Validation\Rules\Unique;
 
 class GlobalAddonResource extends Resource
 {
+    use ManagerEdits;
+
     protected static ?string $model = Addon::class;
     protected static ?string $navigationIcon = 'heroicon-o-plus-circle';
     protected static ?string $navigationGroup = 'القائمة';

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Support\Staff;
 use App\Filament\Resources\CustomerResource\Pages;
 use App\Models\Customer;
 use App\Services\Checkout\Money;
@@ -152,6 +153,10 @@ class CustomerResource extends Resource
                     ->label('تعديل الرصيد')
                     ->icon('heroicon-o-banknotes')
                     ->color('warning')
+                    // Crediting a wallet by hand is the one button in the
+                    // dashboard that makes money out of nothing — no order, no
+                    // receipt, no transfer behind it. The manager's.
+                    ->visible(fn () => Staff::isManager())
                     ->form([
                         Forms\Components\ToggleButtons::make('direction')
                             ->label('العملية')

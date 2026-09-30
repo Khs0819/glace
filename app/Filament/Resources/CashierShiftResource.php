@@ -6,11 +6,13 @@ use App\Filament\Resources\CashierShiftResource\Pages;
 use App\Models\CashierShift;
 use App\Models\Order;
 use App\Services\Reporting\FinancialReport;
+use App\Support\Staff;
 use Filament\Infolists;
 use Filament\Infolists\Infolist;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\HtmlString;
 
@@ -45,12 +47,26 @@ class CashierShiftResource extends Resource
 
     public static function canDelete(Model $record): bool
     {
-        return auth()->user()?->isManager() ?? false;
+        return Staff::isManager();
+    }
+
+    /**
+     * The counter sees its own shifts; the manager sees everybody's.
+     *
+     * A shift row is a cash count — the float, what was expected, what was
+     * actually in the drawer and the difference between them. That is one
+     * cashier's record, and reading another's is the manager's job, not a
+     * colleague's.
+     */
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()
+            ->unless(Staff::isManager(), fn (Builder $query) => $query->where('user_id', auth()->id()));
     }
 
     public static function getNavigationBadge(): ?string
     {
-        $open = static::getModel()::whereNull('closed_at')->count();
+        $open = static::getEloquentQuery()->whereNull('closed_at')->count();
 
         return $open > 0 ? $open . ' مفتوحة' : null;
     }
@@ -252,7 +268,7 @@ class CashierShiftResource extends Resource
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\DeleteAction::make()
-                    ->visible(fn () => auth()->user()?->isManager()),
+                    ->visible(fn () => Staff::isManager()),
             ])
             ->emptyStateHeading('لا توجد ورديات')
             ->emptyStateDescription('تُفتح الورديات من شاشة الكاشير.');
