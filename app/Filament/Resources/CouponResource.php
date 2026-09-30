@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Concerns\ManagerOnly;
+use App\Filament\Concerns\ManagerEdits;
 use App\Filament\Resources\CouponResource\Pages;
 use App\Models\Coupon;
 use Filament\Forms;
@@ -20,7 +20,7 @@ use Filament\Tables\Table;
  */
 class CouponResource extends Resource
 {
-    use ManagerOnly;
+    use ManagerEdits;
 
     protected static ?string $model = Coupon::class;
     protected static ?string $navigationIcon = 'heroicon-o-ticket';

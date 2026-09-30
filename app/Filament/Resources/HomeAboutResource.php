@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Concerns\ManagerOnly;
+use App\Filament\Concerns\ManagerEdits;
 use App\Filament\Resources\HomeAboutResource\Pages;
 use App\Models\HomeAbout;
 use Filament\Forms;
@@ -13,7 +13,7 @@ use Filament\Tables\Table;
 
 class HomeAboutResource extends Resource
 {
-    use ManagerOnly;
+    use ManagerEdits;
 
     protected static ?string $model = HomeAbout::class;
     protected static ?string $navigationIcon = 'heroicon-o-information-circle';

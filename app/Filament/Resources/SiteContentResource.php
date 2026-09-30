@@ -2,7 +2,8 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Concerns\ManagerOnly;
+use App\Support\Staff;
+use App\Filament\Concerns\ManagerEdits;
 use App\Filament\Resources\SiteContentResource\Pages;
 use App\Models\SiteContent;
 use Filament\Forms;
@@ -22,7 +23,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class SiteContentResource extends Resource
 {
-    use ManagerOnly;
+    use ManagerEdits;
 
     protected static ?string $model = SiteContent::class;
     protected static ?string $navigationIcon = 'heroicon-o-document-text';
@@ -34,10 +35,14 @@ class SiteContentResource extends Resource
     protected static ?string $recordTitleAttribute = 'title';
     protected static ?string $slug = 'site-contents';
 
-    /** The two pages are fixed; the storefront has a route for each. */
+    /**
+     * The two pages are fixed; the storefront has a route for each — and the
+     * manager writes them, which is why this asks both questions rather than
+     * letting its own cap stand in for the role.
+     */
     public static function canCreate(): bool
     {
-        return SiteContent::count() < 2;
+        return Staff::isManager() && SiteContent::count() < 2;
     }
 
     public static function canDelete(Model $record): bool

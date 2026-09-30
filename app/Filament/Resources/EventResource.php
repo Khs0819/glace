@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Concerns\ManagerOnly;
+use App\Filament\Concerns\ManagerEdits;
 use App\Filament\Resources\EventResource\Pages;
 use App\Filament\Resources\EventResource\RelationManagers;
 use App\Models\Event;
@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 class EventResource extends Resource
 {
-    use ManagerOnly;
+    use ManagerEdits;
 
     protected static ?string $model = Event::class;
     protected static ?string $navigationIcon = 'heroicon-o-calendar-days';

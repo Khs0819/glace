@@ -263,15 +263,25 @@ class CashierShiftResource extends Resource
 
                 Tables\Filters\SelectFilter::make('user_id')
                     ->label('الكاشير')
-                    ->relationship('user', 'name'),
+                    ->relationship('user', 'name')
+                    // Nothing to filter by when there is only ever one name
+                    // here — and it stops the counter wondering why the list
+                    // offers colleagues it cannot show.
+                    ->visible(fn () => Staff::isManager()),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\DeleteAction::make()
                     ->visible(fn () => Staff::isManager()),
             ])
+            // Always on the page, not only when it is empty: this is an
+            // archive, and the counter has to know the till screen is where a
+            // shift is actually opened and handed over.
+            ->description(Staff::isManager()
+                ? 'سجلّ الورديات. تُفتح وتُغلق من «شاشة الكاشير».'
+                : 'ورديّاتك. تُفتح وتُغلق من «شاشة الكاشير».')
             ->emptyStateHeading('لا توجد ورديات')
-            ->emptyStateDescription('تُفتح الورديات من شاشة الكاشير.');
+            ->emptyStateDescription('افتح وردية من «شاشة الكاشير» لتظهر هنا.');
     }
 
     public static function getPages(): array

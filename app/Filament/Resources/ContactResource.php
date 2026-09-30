@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Concerns\ManagerOnly;
+use App\Filament\Concerns\ManagerEdits;
 use App\Filament\Resources\ContactResource\Pages;
 use App\Models\Contact;
 use Filament\Forms;
@@ -15,7 +15,7 @@ use Filament\Tables\Table;
 
 class ContactResource extends Resource
 {
-    use ManagerOnly;
+    use ManagerEdits;
 
     protected static ?string $model = Contact::class;
     protected static ?string $navigationIcon = 'heroicon-o-envelope';

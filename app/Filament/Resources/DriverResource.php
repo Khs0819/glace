@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Concerns\ManagerEdits;
+use App\Filament\Concerns\ManagerDeletes;
 use App\Filament\Resources\DriverResource\Pages;
 use App\Models\Driver;
 use App\Models\Order;
@@ -24,7 +24,7 @@ use Illuminate\Database\Eloquent\Builder;
  */
 class DriverResource extends Resource
 {
-    use ManagerEdits;
+    use ManagerDeletes;
 
     protected static ?string $model = Driver::class;
     protected static ?string $navigationIcon = 'heroicon-o-truck';

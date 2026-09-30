@@ -8,14 +8,19 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * A screen the counter reads all day but does not rewrite.
  *
- * The menu, the delivery zones, the drivers. The counter has to see these
- * constantly, and has to be able to switch a sold-out flavour off — but that
- * edit goes through the «متوفر» toggle on the table, which Filament does not
- * gate behind canEdit(), so it keeps working here. What is closed is the form:
- * prices, new rows, and deletions belong to the manager.
+ * Two kinds of screen end up here.
  *
- * A price typed at the counter is the quiet version of the same problem the
- * payment accounts have: nobody notices until the day's takings are short.
+ * The menu and the delivery zones, because the counter has to see them
+ * constantly and has to be able to switch a sold-out flavour off — and that
+ * edit goes through the «متوفر» toggle on the table, which Filament does not
+ * gate behind canEdit(), so it keeps working. What is closed is the form: a
+ * price typed at the counter is the quiet version of the same problem the
+ * payment accounts have, and nobody notices until the takings are short.
+ *
+ * And the coupons and the website — the slides, the FAQs, the contact
+ * messages. Reading these answers a customer at the till ("is that code still
+ * good?"), so hiding them only sends the counter to find a manager. Publishing
+ * them is a different act, and it is the manager's.
  */
 trait ManagerEdits
 {

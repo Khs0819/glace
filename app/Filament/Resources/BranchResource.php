@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Concerns\ManagerOnly;
+use App\Filament\Concerns\ManagerEdits;
 use App\Filament\Resources\BranchResource\Pages;
 use App\Models\Branch;
 use Filament\Forms;
@@ -13,7 +13,7 @@ use Filament\Tables\Table;
 
 class BranchResource extends Resource
 {
-    use ManagerOnly;
+    use ManagerEdits;
 
     protected static ?string $model = Branch::class;
     protected static ?string $navigationIcon = 'heroicon-o-map-pin';

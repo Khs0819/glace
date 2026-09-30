@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Concerns\ManagerOnly;
+use App\Filament\Concerns\ManagerEdits;
 use App\Filament\Resources\HomeWhyGlaceResource\Pages;
 use App\Models\HomeWhyGlace;
 use Filament\Forms;
@@ -13,7 +13,7 @@ use Filament\Tables\Table;
 
 class HomeWhyGlaceResource extends Resource
 {
-    use ManagerOnly;
+    use ManagerEdits;
 
     protected static ?string $model = HomeWhyGlace::class;
     protected static ?string $navigationIcon = 'heroicon-o-star';

@@ -23,48 +23,47 @@ use Livewire\Livewire;
 // ─── manager and counter ────────────────────────────────────────────────────
 
 /**
- * Every screen the counter account must not open.
+ * The two screens the counter account does not open at all.
  *
- * Grouped by what a mis-tap on each would cost, because that is the reason any
- * of them is on the list:
- *
- *   money     — where customers transfer to, what the shop gives away, and the
- *               figures for any period anyone cares to ask about
- *   the shop  — the menu, its prices, the zones, the drivers
- *   the world — what the website says, and who can sign in at all
+ * Short on purpose. The line the shop drew is deletion, money and control of
+ * the system — not "anything a manager might care about", which only sends the
+ * counter looking for a manager mid-shift. These two are where the customers'
+ * money is sent, and who may sign in at all.
  */
 dataset('manager only', [
     'payment accounts' => [App\Filament\Resources\PaymentAccountResource::class],
     'staff'            => [App\Filament\Resources\UserResource::class],
-    'coupons'          => [App\Filament\Resources\CouponResource::class],
-    'branches'         => [App\Filament\Resources\BranchResource::class],
-    'hero slides'      => [App\Filament\Resources\HeroSlideResource::class],
-    'site content'     => [App\Filament\Resources\SiteContentResource::class],
-    'events'           => [App\Filament\Resources\EventResource::class],
-    'faqs'             => [App\Filament\Resources\FaqResource::class],
-    'contacts'         => [App\Filament\Resources\ContactResource::class],
-    'home about'       => [App\Filament\Resources\HomeAboutResource::class],
-    'home why'         => [App\Filament\Resources\HomeWhyGlaceResource::class],
 ]);
 
-/** Screens the counter reads all day but does not rewrite. */
+/** Screens the counter reads all day — and does not rewrite. */
 dataset('read only for the counter', [
-    'products'   => [App\Filament\Resources\ProductResource::class],
-    'categories' => [App\Filament\Resources\MenuCategoryResource::class],
-    'flavors'    => [App\Filament\Resources\FlavorResource::class],
-    'addons'     => [App\Filament\Resources\GlobalAddonResource::class],
-    'zones'      => [App\Filament\Resources\DeliveryZoneResource::class],
-    'drivers'    => [App\Filament\Resources\DriverResource::class],
+    'products'     => [App\Filament\Resources\ProductResource::class],
+    'categories'   => [App\Filament\Resources\MenuCategoryResource::class],
+    'flavors'      => [App\Filament\Resources\FlavorResource::class],
+    'addons'       => [App\Filament\Resources\GlobalAddonResource::class],
+    'zones'        => [App\Filament\Resources\DeliveryZoneResource::class],
+    // Answering "is that code still good?" at the till beats fetching a
+    // manager; publishing a new one is a different act.
+    'coupons'      => [App\Filament\Resources\CouponResource::class],
+    'branches'     => [App\Filament\Resources\BranchResource::class],
+    'hero slides'  => [App\Filament\Resources\HeroSlideResource::class],
+    'site content' => [App\Filament\Resources\SiteContentResource::class],
+    'events'       => [App\Filament\Resources\EventResource::class],
+    'faqs'         => [App\Filament\Resources\FaqResource::class],
+    'contacts'     => [App\Filament\Resources\ContactResource::class],
+    'home about'   => [App\Filament\Resources\HomeAboutResource::class],
+    'home why'     => [App\Filament\Resources\HomeWhyGlaceResource::class],
 ]);
 
 /** Screens the counter needs to get through a shift. */
 dataset('the counter works here', [
-    'orders'   => [App\Filament\Resources\OrderResource::class],
-    'refunds'  => [App\Filament\Resources\ChangeRefundRequestResource::class],
-    'top-ups'  => [App\Filament\Resources\TopUpRequestResource::class],
+    'orders'    => [App\Filament\Resources\OrderResource::class],
+    'refunds'   => [App\Filament\Resources\ChangeRefundRequestResource::class],
+    'top-ups'   => [App\Filament\Resources\TopUpRequestResource::class],
     'customers' => [App\Filament\Resources\CustomerResource::class],
-    'payouts'  => [App\Filament\Resources\DriverPayoutResource::class],
-    'shifts'   => [App\Filament\Resources\CashierShiftResource::class],
+    'payouts'   => [App\Filament\Resources\DriverPayoutResource::class],
+    'shifts'    => [App\Filament\Resources\CashierShiftResource::class],
+    'drivers'   => [App\Filament\Resources\DriverResource::class],
 ]);
 
 it('closes the sensitive screens to the counter account', function (string $resource) {
@@ -101,6 +100,46 @@ it('leaves the counter the screens a shift is run from', function (string $resou
 
     $this->get($resource::getUrl('index'))->assertSuccessful();
 })->with('the counter works here');
+
+it('lets the counter add a driver, and only the manager remove one', function () {
+    $driver = Driver::create(['name' => 'محمود', 'phone' => '0599876543']);
+
+    // A driver turning up at eleven at night is the counter's problem to solve,
+    // and there is nobody else there to solve it.
+    $this->actingAs(User::factory()->accountant()->create());
+
+    expect(App\Filament\Resources\DriverResource::canCreate())->toBeTrue()
+        ->and(App\Filament\Resources\DriverResource::canEdit($driver))->toBeTrue()
+        // His name is frozen onto every order he carried and every fee he was
+        // paid; removing the row is a question about records.
+        ->and(App\Filament\Resources\DriverResource::canDelete($driver))->toBeFalse();
+
+    $this->actingAs(User::factory()->create());
+
+    expect(App\Filament\Resources\DriverResource::canDelete($driver))->toBeTrue();
+});
+
+it('lets the counter open and close its own shift from the till screen', function () {
+    $cashier = User::factory()->accountant()->create();
+    $this->actingAs($cashier);
+
+    // The shifts page is the archive; the shift itself is opened where the
+    // drawer is. Both actions are the counter's, and neither asks a manager.
+    Livewire::test(App\Filament\Pages\CashierBoard::class)
+        ->callAction('openShift', ['opening_float' => 100])
+        ->assertHasNoActionErrors();
+
+    $shift = CashierShift::sole();
+
+    expect($shift->user_id)->toBe($cashier->id)
+        ->and($shift->closed_at)->toBeNull();
+
+    Livewire::test(App\Filament\Pages\CashierBoard::class)
+        ->callAction('closeShift', ['counted_cash' => 100])
+        ->assertHasNoActionErrors();
+
+    expect($shift->fresh()->closed_at)->not->toBeNull();
+});
 
 it('keeps shift deletion and the financial reports to the manager', function () {
     $accountant = User::factory()->accountant()->create();
