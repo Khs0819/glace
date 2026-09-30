@@ -1454,10 +1454,11 @@
 
                     <div class="px-5 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-end gap-2">
                         <button @click="details = null" class="modal-btn-cancel">إغلاق</button>
-                        <button type="button" @click.stop="printOrder({ reference: details.reference })" class="modal-btn-confirm" style="background:#475569">🖨️ طباعة</button>
-                        <template x-if="details.canConfirmTransfer">
-                            <button @click="confirmTransfer()" class="modal-btn-confirm" style="background:#16a34a">✅ تأكيد الدفع</button>
-                        </template>
+                        {{-- Printing is the confirmation. The separate
+                             "✅ تأكيد الدفع" that stood here asked the same
+                             question a second time: the cashier had already
+                             checked the transfer landed before printing. --}}
+                        <button type="button" @click.stop="printOrder({ reference: details.reference })" class="modal-btn-confirm" style="background:#16a34a">🖨️ طباعة وتأكيد الدفع</button>
                     </div>
                 </div>
             </div>
@@ -1997,6 +1998,11 @@
                 },
 
                 async printOrder(order) {
+                    // The press is the confirmation: the cashier does not print
+                    // until the money is in. Fired before the print itself so a
+                    // browser dialog left open does not hold the order back.
+                    this.$wire.settleOnPrint(order.reference).then(() => this.refresh());
+
                     if (!this.networkPrinter) {
                         this.print(order, false);
                         return;
@@ -2202,13 +2208,6 @@
 
                 async openDetails(order) {
                     this.details = await this.$wire.orderDetails(order.reference);
-                },
-
-                async confirmTransfer() {
-                    if (!this.details) return;
-                    await this.$wire.confirmTransferPayment(this.details.reference);
-                    this.details = await this.$wire.orderDetails(this.details.reference);
-                    this.refresh();
                 },
 
                 completeRefund(id) {

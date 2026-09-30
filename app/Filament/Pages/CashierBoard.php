@@ -217,6 +217,68 @@ class CashierBoard extends Page
     // ─── actions on one order ───────────────────────────────────────────────
 
     /**
+     * What pressing «طباعة» settles, besides printing.
+     *
+     * The shop's rule, and it is a sound one: a cashier does not print a
+     * receipt until the money is in — so the print *is* the confirmation, and
+     * a separate "تأكيد الدفع" button was one press asking the same question
+     * twice. Printing marks the order paid and starts it preparing.
+     *
+     * **Only a print somebody pressed.** The automatic print that fires as an
+     * order lands from the storefront goes through PrintOrderReceipt and the
+     * `?auto=1` receipt URL, and reaches none of this — otherwise every order
+     * would mark itself paid on arrival, before anyone had looked at it.
+     *
+     * Nothing here refuses out loud. The cashier asked for a receipt, and got
+     * one; a wallet order that was already paid, or a delivery already on the
+     * road, simply has nothing left for this to do.
+     */
+    public function settleOnPrint(string $reference): void
+    {
+        $order = Order::where('reference', $reference)->first();
+
+        if (! $order || $order->isFinal()) {
+            return;
+        }
+
+        $shift = $this->shift();
+
+        if (! $order->isPaid()) {
+            // Cash needs the drawer it is counted into; a transfer or a card
+            // does not, and must not be held up by a missing shift.
+            if ($order->collectedByHand() && ! $shift) {
+                Notification::make()
+                    ->title('افتح وردية أولاً')
+                    ->body('طُبعت الفاتورة، لكن الدفع لم يُسجَّل — بدون وردية لن يظهر النقد في تقرير الإغلاق.')
+                    ->danger()
+                    ->persistent()
+                    ->send();
+
+                return;
+            }
+
+            // The cash ceiling still applies: a print does not wave it through.
+            if ($order->collectedByHand()
+                && ! $this->withinCashLimits($order, (float) ($order->tendered_amount ?? $order->total))) {
+                return;
+            }
+
+            $order->update([
+                'payment_status' => Order::STATUS_PAID,
+                'paid_at'        => now(),
+                'paid_by'        => auth()->id(),
+                'shift_id'       => $order->shift_id ?? $shift?->getKey(),
+            ]);
+        }
+
+        // Printed means the kitchen has it. Only from the first step — a print
+        // of an order already "جاهز للاستلام" must not send it backwards.
+        if ($order->status === Order::FULFILMENT_REVIEW) {
+            $order->update(['status' => Order::FULFILMENT_PREPARING]);
+        }
+    }
+
+    /**
      * Take payment for an order settled at the counter.
      *
      * Only cash and card: everything else is settled by a gateway, a wallet

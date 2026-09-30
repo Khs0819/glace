@@ -255,6 +255,16 @@ class ChangeRefundRequestResource extends Resource
                         Notification::make()->title('تم رفض الطلب')->warning()->send();
                     }),
 
+                // The slip, onto the machine. It was viewable and nothing else,
+                // which is no use when it has to be attached to an email or
+                // handed to somebody asking where their money went.
+                Tables\Actions\Action::make('downloadReceipt')
+                    ->label('تحميل الإشعار')
+                    ->icon('heroicon-o-arrow-down-tray')
+                    ->color('gray')
+                    ->visible(fn (ChangeRefundRequest $record) => filled($record->transfer_receipt))
+                    ->action(fn (ChangeRefundRequest $record) => $record->downloadReceipt()),
+
                 Tables\Actions\ViewAction::make()->label('عرض'),
             ])
             /*

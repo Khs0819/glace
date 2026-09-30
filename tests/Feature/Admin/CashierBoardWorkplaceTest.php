@@ -392,3 +392,75 @@ it('shows who sent a transfer on the board and in the details window', function 
         ->and(Livewire::test(CashierBoard::class)->instance()->orderDetails($order->reference)['senderAccountName'])
         ->toBe('محمود سالم');
 });
+
+// ─── printing settles the order ─────────────────────────────────────────────
+//
+// The shop's rule: a cashier does not print a receipt until the money is in.
+// So the print is the confirmation, and the separate "تأكيد الدفع" button was
+// asking the same question twice.
+
+it('marks an order paid and starts it preparing when the receipt is printed', function () {
+    boardShift();
+    $order = boardOrder(['status' => Order::FULFILMENT_REVIEW]);
+
+    Livewire::test(CashierBoard::class)->call('settleOnPrint', $order->reference);
+
+    expect($order->fresh()->isPaid())->toBeTrue()
+        ->and($order->fresh()->status)->toBe(Order::FULFILMENT_PREPARING)
+        ->and($order->fresh()->paid_by)->toBe($this->cashier->id);
+});
+
+it('confirms a transfer on print too, without a second button', function () {
+    boardShift();
+    $order = boardOrder(['payment_method' => 'jawwal-manual', 'status' => Order::FULFILMENT_REVIEW]);
+
+    Livewire::test(CashierBoard::class)->call('settleOnPrint', $order->reference);
+
+    expect($order->fresh()->isPaid())->toBeTrue()
+        ->and($order->fresh()->status)->toBe(Order::FULFILMENT_PREPARING);
+});
+
+it('does not send a printed reprint backwards down the ladder', function () {
+    boardShift();
+    $order = boardOrder(['status' => Order::FULFILMENT_READY]);
+
+    Livewire::test(CashierBoard::class)->call('settleOnPrint', $order->reference);
+
+    // A reprint of an order already waiting on the counter must not take it
+    // back to "جاري التحضير".
+    expect($order->fresh()->status)->toBe(Order::FULFILMENT_READY)
+        ->and($order->fresh()->isPaid())->toBeTrue();
+});
+
+it('leaves a finished order alone when its receipt is printed again', function () {
+    boardShift();
+    $order = boardOrder(['status' => Order::FULFILMENT_RECEIVED, 'payment_status' => Order::STATUS_PAID, 'paid_at' => now()]);
+
+    Livewire::test(CashierBoard::class)->call('settleOnPrint', $order->reference);
+
+    expect($order->fresh()->status)->toBe(Order::FULFILMENT_RECEIVED);
+});
+
+it('prints without taking cash when no shift is open, and says so', function () {
+    $order = boardOrder(['status' => Order::FULFILMENT_REVIEW]);
+
+    Livewire::test(CashierBoard::class)->call('settleOnPrint', $order->reference);
+
+    // Cash with nowhere to be counted would leave the closing report short by
+    // exactly this amount, so the payment waits and the cashier is told.
+    expect($order->fresh()->isPaid())->toBeFalse();
+});
+
+it('keeps the accountant cash ceiling on a print', function () {
+    boardShift();
+    $this->actingAs(User::factory()->accountant()->create());
+    boardShift(['user_id' => auth()->id()]);
+
+    $order = boardOrder(['total' => 250, 'subtotal' => 250, 'status' => Order::FULFILMENT_REVIEW]);
+
+    Livewire::test(CashierBoard::class)->call('settleOnPrint', $order->reference);
+
+    // 250 ₪ in cash is over the counter's limit; printing does not wave it
+    // through any more than the pay button did.
+    expect($order->fresh()->isPaid())->toBeFalse();
+});

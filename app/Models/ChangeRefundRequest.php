@@ -3,8 +3,11 @@
 namespace App\Models;
 
 use App\Support\MediaUrl;
+use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * A request to refund change from a cash payment.
@@ -74,6 +77,33 @@ class ChangeRefundRequest extends Model
     public function transferReceiptUrl(): ?string
     {
         return MediaUrl::resolve($this->transfer_receipt);
+    }
+
+    /**
+     * The slip as a file on the machine, not a picture on a screen.
+     *
+     * Named after the order rather than the storage hash, because it leaves
+     * here to be attached to something — an email to the customer, a folder
+     * the accountant keeps — where "01a0f3.png" says nothing.
+     */
+    public function downloadReceipt(): ?StreamedResponse
+    {
+        $path = (string) $this->transfer_receipt;
+
+        if ($path === '' || ! Storage::disk('public')->exists($path)) {
+            Notification::make()
+                ->title('الإشعار غير موجود على الخادم')
+                ->body('ربما حُذف الملف — راجع سجل التحويل مع من رفعه.')
+                ->danger()
+                ->send();
+
+            return null;
+        }
+
+        $name = 'اشعار-تحويل-' . ($this->order_reference ?: $this->getKey())
+            . '.' . (pathinfo($path, PATHINFO_EXTENSION) ?: 'png');
+
+        return Storage::disk('public')->download($path, $name);
     }
 
     public function methodLabel(): string

@@ -313,6 +313,43 @@ it('keeps a sent refund in the archive rather than out of the way', function () 
         ->assertCanSeeTableRecords([$request->fresh()]);
 });
 
+it('hands the transfer slip over as a file, not only a picture', function () {
+    fakePublicDisk();
+    $order = ccDelivery(['payment_status' => Order::STATUS_PAID, 'paid_at' => now()]);
+
+    Livewire::test(CashierBoard::class)->callAction('refundOrder', [
+        'method' => 'bop', 'holder_name' => 'أحمد', 'holder_phone' => '0599123456',
+        'notes'  => 'الطلب وصل ناقصاً',
+    ], ['reference' => $order->reference]);
+
+    Livewire::test(ChangeRefundRequestResource\Pages\ListChangeRefundRequests::class)
+        ->callTableAction('markCompleted', ChangeRefundRequest::sole(), [
+            'transfer_receipt' => Illuminate\Http\UploadedFile::fake()->image('slip.png'),
+        ]);
+
+    $request = ChangeRefundRequest::sole();
+
+    Livewire::test(ChangeRefundRequestResource\Pages\ListChangeRefundRequests::class)
+        ->set('activeTab', 'completed')
+        ->callTableAction('downloadReceipt', $request)
+        // Named after the order, because it leaves to be attached to something
+        // where the storage hash would say nothing.
+        ->assertFileDownloaded('اشعار-تحويل-' . $order->reference . '.png');
+});
+
+it('offers no download for a request with no slip yet', function () {
+    fakePublicDisk();
+    $order = ccDelivery(['payment_status' => Order::STATUS_PAID, 'paid_at' => now()]);
+
+    Livewire::test(CashierBoard::class)->callAction('refundOrder', [
+        'method' => 'bop', 'holder_name' => 'أحمد', 'holder_phone' => '0599123456',
+        'notes'  => 'الطلب وصل ناقصاً',
+    ], ['reference' => $order->reference]);
+
+    Livewire::test(ChangeRefundRequestResource\Pages\ListChangeRefundRequests::class)
+        ->assertTableActionHidden('downloadReceipt', ChangeRefundRequest::sole());
+});
+
 it('will not refund an order nobody has paid for', function () {
     $order = ccDelivery();
 
