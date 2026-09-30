@@ -2,7 +2,10 @@
 
 namespace App\Filament\Resources\ProductResource\RelationManagers;
 
+use App\Filament\Resources\FlavorResource;
 use App\Models\Addon;
+use App\Models\Flavor;
+use App\Support\FlavorFamily;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
@@ -16,14 +19,20 @@ use Illuminate\Validation\Rules\Unique;
 /**
  * The scoop of ice cream a waffle or a crepe can carry.
  *
- * Each flavour is priced on its own — pistachio is not lotus — and belongs to
- * one of two families the storefront draws as two lists. There is no separate
- * "offer this addon" switch: a product with no flavours here shows nothing,
- * which is why «تعطيل الكل» exists — it takes the addon off the storefront
- * without throwing the prices away.
+ * The flavours are **the shop's flavours** — the same rows as القائمة ← النكهات,
+ * picked here rather than typed again. That is what makes one switch enough:
+ * closing pistachio when it runs out closes it on every product that offers it,
+ * and the cashier does it in the one place they already close flavours.
  *
- * Only for flat-list products. A builder product already has an ice cream step
- * of its own.
+ * What stays on this product is what belongs to this product: the price, since
+ * a scoop on a crepe need not cost what it costs on a waffle, and the order the
+ * two lists are drawn in.
+ *
+ * There is no "offer this addon" switch of its own: a product with no flavours
+ * here shows nothing, which is why «تعطيل الكل» exists — it takes the control
+ * off the storefront without throwing the prices away.
+ *
+ * Only for flat-list products. A builder product already has an ice cream step.
  */
 class ExtraScoopRelationManager extends RelationManager
 {
@@ -45,61 +54,68 @@ class ExtraScoopRelationManager extends RelationManager
     public function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Select::make('scoop_family')
-                ->label('العائلة')
-                ->options(Addon::SCOOP_FAMILIES)
-                ->default(Addon::SCOOP_CLASSIC)
+            Forms\Components\Select::make('flavor_id')
+                ->label('النكهة')
+                ->options(fn () => $this->flavorOptions())
+                ->searchable()
                 ->required()
-                ->native(false),
-
-            Forms\Components\TextInput::make('slug')
-                ->label('المعرف')
-                ->required()
-                ->maxLength(100)
-                ->alphaDash()
-                ->default('scoop-')
-                ->unique(ignoreRecord: true, modifyRuleUsing: fn (Unique $rule) => $rule->where('product_id', $this->getOwnerRecord()->getKey()))
-                ->helperText('فريد داخل هذا المنتج — مثال: scoop-special-pistachio'),
-
-            Forms\Components\TextInput::make('label')
-                ->label('اسم النكهة')
-                ->required()
-                ->maxLength(200)
-                ->placeholder('بيستاشيو'),
+                ->native(false)
+                ->helperText('من «القائمة ← النكهات». التوفر يُدار هناك ويسري على الموقع كله.')
+                // The same flavour twice on one product is two rows for one
+                // choice, and the storefront would draw it twice.
+                ->unique(
+                    ignoreRecord: true,
+                    modifyRuleUsing: fn (Unique $rule) => $rule->where('product_id', $this->getOwnerRecord()->getKey()),
+                ),
 
             Forms\Components\TextInput::make('price')
                 ->label('السعر (₪)')
                 ->numeric()
                 ->required()
-                ->helperText('لكل نكهة سعرها — النكهات داخل العائلة الواحدة ليست بالضرورة بنفس السعر.'),
+                ->helperText('سعر هذه النكهة على هذا المنتج — النكهات داخل العائلة الواحدة ليست بالضرورة بنفس السعر.'),
 
             Forms\Components\TextInput::make('sort_order')
                 ->label('الترتيب')
                 ->numeric()
                 ->default(1),
-
-            Forms\Components\Toggle::make('available')
-                ->label('متوفرة')
-                ->default(true)
-                ->helperText('إطفاؤها يُبقيها ظاهرة للزبون كغير متوفرة. لإخفاء الخيار كله استخدم «تعطيل الكل».'),
         ]);
     }
 
     public function table(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query) => $query->whereNotNull('scoop_family'))
+            ->modifyQueryUsing(fn (Builder $query) => $query->whereNotNull('scoop_family')->with('flavor'))
+            ->description('التوفر يأتي من «القائمة ← النكهات» — إطفاء نكهة هنا يُطفئها في كل الموقع.')
             ->columns([
-                Tables\Columns\TextColumn::make('scoop_family')
+                Tables\Columns\TextColumn::make('flavor.family')
                     ->label('العائلة')
                     ->badge()
-                    ->formatStateUsing(fn (?string $state) => Addon::SCOOP_FAMILIES[$state] ?? $state)
-                    ->color(fn (?string $state) => $state === Addon::SCOOP_SPECIAL ? 'warning' : 'gray'),
+                    // Drawn exactly as النكهات draws it, because it is the same
+                    // value read from the same row.
+                    ->formatStateUsing(fn (?string $state) => FlavorFamily::label($state))
+                    ->color(fn (?string $state) => FlavorFamily::color($state)),
 
-                Tables\Columns\TextColumn::make('label')->label('النكهة')->searchable(),
-                Tables\Columns\TextColumn::make('slug')->label('المعرف')->copyable()->toggleable(),
+                Tables\Columns\TextColumn::make('flavor.name_ar')
+                    ->label('النكهة')
+                    ->searchable()
+                    ->weight(\Filament\Support\Enums\FontWeight::SemiBold)
+                    ->placeholder('— نكهة محذوفة —')
+                    ->description(fn (Addon $record) => $record->flavor
+                        ? null
+                        : 'كانت: ' . $record->label . ' — اختر نكهة بديلة أو احذف السطر'),
+
                 Tables\Columns\TextColumn::make('price')->label('السعر')->suffix(' ₪')->sortable(),
-                Tables\Columns\IconColumn::make('available')->label('متوفرة')->boolean(),
+
+                Tables\Columns\ToggleColumn::make('flavor.available')
+                    ->label('متوفرة')
+                    ->onColor('success')
+                    ->offColor('danger')
+                    ->tooltip('نفس مفتاح النكهة في «القائمة ← النكهات» — يسري على كل المنتجات')
+                    ->disabled(fn (Addon $record) => $record->flavor === null)
+                    ->getStateUsing(fn (Addon $record) => (bool) $record->flavor?->available)
+                    // Written to the flavour, not to this row: one switch, and
+                    // it is the one the rest of the menu already obeys.
+                    ->updateStateUsing(fn (Addon $record, bool $state) => $record->flavor?->update(['available' => $state])),
             ])
             ->defaultSort('sort_order')
             ->filters([
@@ -108,22 +124,26 @@ class ExtraScoopRelationManager extends RelationManager
             ->headerActions([
                 Tables\Actions\CreateAction::make()
                     ->label('إضافة نكهة')
-                    // A scoop is one or none, never four: the same shape as
-                    // every other toggle addon, so the order code already
-                    // refuses a quantity above one.
-                    ->mutateFormDataUsing(fn (array $data) => $data + ['type' => 'toggle', 'max_qty' => null]),
+                    ->mutateFormDataUsing(fn (array $data) => $this->fromFlavor($data, mintSlug: true)),
+
+                Tables\Actions\Action::make('manageFlavors')
+                    ->label('إدارة النكهات')
+                    ->icon('heroicon-o-swatch')
+                    ->color('gray')
+                    ->url(fn () => FlavorResource::getUrl('index'))
+                    ->openUrlInNewTab(),
 
                 Tables\Actions\Action::make('disableAll')
                     ->label('تعطيل الكل')
                     ->icon('heroicon-o-eye-slash')
                     ->color('danger')
                     ->requiresConfirmation()
-                    ->modalDescription('يختفي خيار البوظة الإضافية من صفحة المنتج، وتبقى النكهات وأسعارها محفوظة.')
+                    ->modalDescription('يختفي خيار البوظة الإضافية من صفحة هذا المنتج وحده، وتبقى النكهات وأسعارها محفوظة. لإيقاف نكهة في كل الموقع استخدم مفتاح «متوفرة».')
                     ->visible(fn () => $this->scoops()->where('available', true)->exists())
                     ->action(function () {
                         $this->scoops()->update(['available' => false]);
 
-                        Notification::make()->title('تم إخفاء البوظة الإضافية من المتجر')->success()->send();
+                        Notification::make()->title('تم إخفاء البوظة الإضافية من هذا المنتج')->success()->send();
                     }),
 
                 Tables\Actions\Action::make('enableAll')
@@ -134,22 +154,80 @@ class ExtraScoopRelationManager extends RelationManager
                     ->action(function () {
                         $this->scoops()->update(['available' => true]);
 
-                        Notification::make()->title('عادت البوظة الإضافية للمتجر')->success()->send();
+                        Notification::make()->title('عادت البوظة الإضافية لهذا المنتج')->success()->send();
                     }),
             ])
             ->actions([
                 Tables\Actions\EditAction::make()
-                    ->mutateFormDataUsing(fn (array $data) => $data + ['type' => 'toggle', 'max_qty' => null]),
-
-                Tables\Actions\Action::make('toggle')
-                    ->label(fn (Addon $record) => $record->available ? 'إيقاف' : 'تفعيل')
-                    ->color(fn (Addon $record) => $record->available ? 'danger' : 'success')
-                    ->action(fn (Addon $record) => $record->update(['available' => ! $record->available])),
+                    ->mutateFormDataUsing(fn (array $data) => $this->fromFlavor($data, mintSlug: false)),
 
                 Tables\Actions\DeleteAction::make(),
             ])
             ->emptyStateHeading('لا توجد نكهات بوظة لهذا المنتج')
-            ->emptyStateDescription('أضف نكهة ليظهر خيار «أضف بوظة» للزبون على صفحة المنتج.');
+            ->emptyStateDescription('أضف نكهة من قائمة النكهات ليظهر خيار «أضف بوظة» للزبون على صفحة المنتج.');
+    }
+
+    /**
+     * The flavours a scoop can be, labelled the way النكهات labels them.
+     *
+     * Only the two families the storefront draws a list for; a ستيفيا flavour
+     * has nowhere to appear on the product page.
+     *
+     * @return array<string, string>
+     */
+    private function flavorOptions(): array
+    {
+        return Flavor::query()
+            ->whereIn('family', array_keys(Addon::SCOOP_FAMILIES))
+            ->orderBy('family')
+            ->orderBy('name_ar')
+            ->get()
+            ->mapWithKeys(fn (Flavor $flavor) => [
+                $flavor->id => FlavorFamily::label($flavor->family) . ' · ' . $flavor->name_ar,
+            ])
+            ->all();
+    }
+
+    /**
+     * What the row keeps of the flavour it points at.
+     *
+     * `label` and `scoop_family` are copies, kept in step so the dashboard's
+     * own tables and the printed receipt read without a join — and so a scoop
+     * whose flavour is later deleted still says what it was.
+     *
+     * `slug` is different: it is the id the storefront sends back when the
+     * scoop is ordered, so it is minted once, on creation, and never again.
+     * Re-deriving it on an edit would change the id of a scoop already sitting
+     * in somebody's cart.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function fromFlavor(array $data, bool $mintSlug): array
+    {
+        $flavor = Flavor::find($data['flavor_id'] ?? null);
+
+        // A scoop is one or none, never four: the same shape as every other
+        // toggle addon, so the order code already refuses a quantity above one.
+        $data['type']    = 'toggle';
+        $data['max_qty'] = null;
+
+        if ($flavor) {
+            $data['label']        = $flavor->name_ar;
+            $data['scoop_family'] = isset(Addon::SCOOP_FAMILIES[$flavor->family])
+                ? $flavor->family
+                : Addon::SCOOP_CLASSIC;
+
+            if ($mintSlug) {
+                $data['slug'] = 'scoop-' . $flavor->id;
+            }
+        }
+
+        // Offered on this product unless «تعطيل الكل» says otherwise; whether
+        // there is any left today is the flavour's answer, not this row's.
+        $data['available'] ??= true;
+
+        return $data;
     }
 
     /** @return \Illuminate\Database\Eloquent\Relations\HasMany<Addon> */

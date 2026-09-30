@@ -28,7 +28,9 @@ class MenuProductController extends Controller
             'iceCreamAddonPrices',
             'items',
             'mixes',
-            'addons',
+            // The flavour behind each scoop: its name and its availability are
+            // what the product page shows, not the addon row's own copies.
+            'addons.flavor',
         ])->where('available', true)->orderBy('sort_order');
 
         if ($category = $request->query('category')) {
@@ -46,7 +48,7 @@ class MenuProductController extends Controller
             'iceCreamAddonPrices',
             'items',
             'mixes',
-            'addons',
+            'addons.flavor',
             'flavors',
         ])->where('slug', $slug)->first();
 

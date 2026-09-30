@@ -51,7 +51,9 @@ class CartPricer
         ))));
 
         return Product::query()
-            ->with(['containers', 'sizes.prices', 'items', 'mixes', 'addons', 'flavors', 'iceCreamAddonPrices'])
+            // `addons.flavor`: a scoop is a flavour from the menu, and whether
+            // it can be sold is that flavour's switch, not the addon row's.
+            ->with(['containers', 'sizes.prices', 'items', 'mixes', 'addons.flavor', 'flavors', 'iceCreamAddonPrices'])
             ->whereIn('id', $ids)
             ->get()
             ->keyBy(fn (Product $product) => (string) $product->getKey());
@@ -489,12 +491,12 @@ class CartPricer
                     $this->fail($key, 'هذه الإضافة غير معروفة');
                 }
 
-                if (! $addon->available) {
-                    $this->fail($key, "«{$addon->label}» غير متوفرة حالياً");
+                if (! $addon->orderable()) {
+                    $this->fail($key, "«{$addon->scoopLabel()}» غير متوفرة حالياً");
                 }
 
                 if (isset($seen[$slug])) {
-                    $this->fail($key, "«{$addon->label}» مكررة في نفس الوحدة");
+                    $this->fail($key, "«{$addon->scoopLabel()}» مكررة في نفس الوحدة");
                 }
 
                 $seen[$slug] = true;
@@ -613,12 +615,12 @@ class CartPricer
                 $this->fail($key, 'هذه الإضافة غير معروفة');
             }
 
-            if (! $addon->available) {
-                $this->fail($key, "«{$addon->label}» غير متوفرة حالياً");
+            if (! $addon->orderable()) {
+                $this->fail($key, "«{$addon->scoopLabel()}» غير متوفرة حالياً");
             }
 
             if (isset($seen[$slug])) {
-                $this->fail($key, "«{$addon->label}» مكررة");
+                $this->fail($key, "«{$addon->scoopLabel()}» مكررة");
             }
 
             $seen[$slug] = true;

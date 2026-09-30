@@ -5,6 +5,7 @@ use App\Filament\Resources\ProductResource\RelationManagers\ProductAddonsRelatio
 use App\Filament\Resources\ProductResource\Pages\EditProduct;
 use App\Models\Addon;
 use App\Models\Customer;
+use App\Models\Flavor;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
@@ -27,15 +28,31 @@ beforeEach(function () {
     $this->headers  = ['Authorization' => app(CustomerAuthService::class)->issueToken($this->customer)];
 });
 
+/**
+ * A scoop on a product: a flavour from the menu, priced for this product.
+ *
+ * `$available` is the flavour's switch — the one the cashier flips when it runs
+ * out — because that is the one every test here is really about. Whether the
+ * product offers the control at all is the addon's own `available`, which only
+ * «تعطيل الكل» writes.
+ */
 function scoop(Product $product, string $slug, string $label, float $price, string $family, bool $available = true): Addon
 {
+    $flavor = Flavor::firstWhere('name_ar', $label) ?? CatalogFactory::flavor(
+        \Illuminate\Support\Str::after($slug, 'scoop-'),
+        ['name_ar' => $label, 'name_en' => $label, 'family' => $family, 'available' => $available],
+    );
+
+    $flavor->update(['available' => $available]);
+
     return $product->addons()->create([
         'slug'         => $slug,
         'label'        => $label,
         'price'        => $price,
-        'available'    => $available,
+        'available'    => true,
         'type'         => 'toggle',
         'scoop_family' => $family,
+        'flavor_id'    => $flavor->id,
     ]);
 }
 
@@ -163,30 +180,76 @@ it('refuses more than one of the same scoop on a unit', function () {
 
 // ─── the dashboard ──────────────────────────────────────────────────────────
 
-it('adds a scoop flavour from the product page', function () {
+it('adds a scoop by picking a flavour from the menu', function () {
     $this->actingAs(User::factory()->create());
+
+    CatalogFactory::flavor('pistachio', ['name_ar' => 'بيستاشيو', 'family' => 'special']);
+
+    Livewire::test(ExtraScoopRelationManager::class, [
+        'ownerRecord' => $this->crepe,
+        'pageClass'   => EditProduct::class,
+    ])
+        // The price and the order are all this product decides. The name and
+        // the family come from the flavour, and are not typed again.
+        ->callTableAction('create', data: [
+            'flavor_id'  => 'pistachio',
+            'price'      => 9,
+            'sort_order' => 1,
+        ])
+        ->assertHasNoTableActionErrors();
+
+    $addon = $this->crepe->addons()->sole();
+
+    expect($addon->flavor_id)->toBe('pistachio')
+        ->and($addon->scoop_family)->toBe(Addon::SCOOP_SPECIAL)
+        ->and($addon->label)->toBe('بيستاشيو')
+        // The id the storefront will send back when it is ordered.
+        ->and($addon->slug)->toBe('scoop-pistachio')
+        // One scoop or none: the same shape as any toggle addon, which is what
+        // stops an order asking for four of them.
+        ->and($addon->type)->toBe('toggle')
+        ->and($addon->max_qty)->toBeNull();
+});
+
+it('refuses the same flavour twice on one product', function () {
+    $this->actingAs(User::factory()->create());
+
+    scoop($this->crepe, 'scoop-pistachio', 'بيستاشيو', 9, Addon::SCOOP_SPECIAL);
 
     Livewire::test(ExtraScoopRelationManager::class, [
         'ownerRecord' => $this->crepe,
         'pageClass'   => EditProduct::class,
     ])
         ->callTableAction('create', data: [
-            'scoop_family' => Addon::SCOOP_SPECIAL,
-            'slug'         => 'scoop-special-pistachio',
-            'label'        => 'بيستاشيو',
-            'price'        => 9,
-            'available'    => true,
-            'sort_order'   => 1,
+            'flavor_id'  => Flavor::sole()->id,
+            'price'      => 11,
+            'sort_order' => 2,
         ])
-        ->assertHasNoTableActionErrors();
+        ->assertHasTableActionErrors(['flavor_id']);
 
-    $addon = $this->crepe->addons()->sole();
+    expect($this->crepe->addons()->count())->toBe(1);
+});
 
-    expect($addon->scoop_family)->toBe(Addon::SCOOP_SPECIAL)
-        // One scoop or none: the same shape as any toggle addon, which is what
-        // stops an order asking for four of them.
-        ->and($addon->type)->toBe('toggle')
-        ->and($addon->max_qty)->toBeNull();
+it('closes the flavour everywhere from the product page', function () {
+    $this->actingAs(User::factory()->create());
+
+    $waffle = CatalogFactory::flatList('waffle', ['name' => 'وافل']);
+    CatalogFactory::item($waffle, 'plain', ['label' => 'سادة', 'price' => 15]);
+
+    scoop($this->crepe, 'scoop-pistachio', 'بيستاشيو', 9, Addon::SCOOP_SPECIAL);
+    // The same flavour, offered on a second product at a different price.
+    scoop($waffle, 'scoop-w-pistachio', 'بيستاشيو', 11, Addon::SCOOP_SPECIAL);
+
+    Livewire::test(ExtraScoopRelationManager::class, [
+        'ownerRecord' => $this->crepe,
+        'pageClass'   => EditProduct::class,
+    ])->call('updateTableColumnState', 'flavor.available', (string) $this->crepe->addons()->sole()->getKey(), false);
+
+    // One switch, both products — the whole point of pointing at the flavour
+    // instead of copying its name.
+    expect(test()->getJson('/api/menu/products/crepe')->json())->not->toHaveKey('extraScoop')
+        ->and(test()->getJson('/api/menu/products/waffle')->json())->not->toHaveKey('extraScoop')
+        ->and(Flavor::sole()->available)->toBeFalse();
 });
 
 it('takes the whole control off the storefront without losing the prices', function () {
@@ -214,6 +277,65 @@ it('keeps scoops off the ordinary addons tab', function () {
     ])
         ->assertCanSeeTableRecords([$sauce])
         ->assertCanNotSeeTableRecords([$scoop]);
+});
+
+// ─── the flavour behind the scoop ───────────────────────────────────────────
+
+it('greys the scoop out the moment the flavour runs out', function () {
+    scoop($this->crepe, 'scoop-vanilla', 'فانيلا', 5, Addon::SCOOP_CLASSIC);
+    scoop($this->crepe, 'scoop-pistachio', 'بيستاشيو', 9, Addon::SCOOP_SPECIAL);
+
+    // What the cashier does in القائمة ← النكهات, and nothing else.
+    Flavor::where('name_ar', 'بيستاشيو')->update(['available' => false]);
+
+    $product = test()->getJson('/api/menu/products/crepe')->json();
+
+    expect($product['extraScoop']['classic'][0]['available'])->toBeTrue()
+        ->and($product['extraScoop']['special'][0]['available'])->toBeFalse();
+});
+
+it('refuses an order for a flavour that ran out, by the flavour\'s own name', function () {
+    scoop($this->crepe, 'scoop-lotus', 'لوتس', 8, Addon::SCOOP_SPECIAL);
+
+    Flavor::where('name_ar', 'لوتس')->update(['available' => false]);
+
+    test()->post('/api/orders', crepePayload([
+        ['kind' => 'addon', 'id' => 'scoop-lotus', 'label' => 'لوتس', 'qty' => 1],
+    ]), $this->headers)
+        ->assertStatus(422)
+        // Named, not "this addon": the customer is told which flavour is gone.
+        ->assertJsonFragment(['«لوتس» غير متوفرة حالياً']);
+
+    expect(Order::count())->toBe(0);
+});
+
+it('follows the flavour when it is renamed or moved to the other family', function () {
+    scoop($this->crepe, 'scoop-pistachio', 'بيستاشيو', 9, Addon::SCOOP_SPECIAL);
+
+    Flavor::sole()->update(['name_ar' => 'فستق حلبي', 'family' => 'classic']);
+
+    $scoops = test()->getJson('/api/menu/products/crepe')->json('extraScoop');
+
+    // The id does not move with it: a cart already holding this scoop must
+    // still price when the order arrives.
+    expect($scoops)->not->toHaveKey('special')
+        ->and($scoops['classic'][0])->toBe([
+            'id' => 'scoop-pistachio', 'label' => 'فستق حلبي', 'price' => 9, 'available' => true,
+        ]);
+});
+
+it('will not sell a scoop whose flavour was deleted', function () {
+    scoop($this->crepe, 'scoop-lotus', 'لوتس', 8, Addon::SCOOP_SPECIAL);
+
+    Flavor::sole()->delete();
+
+    // A price and a label with nothing behind them. The row is kept so the
+    // shop can see it and fix it, but it is not on sale.
+    expect(test()->getJson('/api/menu/products/crepe')->json())->not->toHaveKey('extraScoop');
+
+    test()->post('/api/orders', crepePayload([
+        ['kind' => 'addon', 'id' => 'scoop-lotus', 'label' => 'لوتس', 'qty' => 1],
+    ]), $this->headers)->assertStatus(422);
 });
 
 it('offers the scoop tab on flat-list products only', function () {

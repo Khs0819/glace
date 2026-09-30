@@ -61,20 +61,28 @@ class ProductResource extends JsonResource
      * all. Unavailable flavours still travel inside a list that has something
      * available, so the customer sees them greyed rather than missing.
      *
+     * The name and the availability are the flavour's own, read from the row
+     * the cashier switches off in القائمة ← النكهات. `id` is not: it is the
+     * addon's slug, which is what the storefront sends back when the scoop is
+     * ordered, and it does not move when a flavour is renamed.
+     *
      * @return array<string, array<int, array<string, mixed>>>|null
      */
     private function extraScoop(): ?array
     {
-        $scoops = $this->addons->filter(fn ($addon) => $addon->isScoop());
+        // `available` on the row is "offered on this product" — what
+        // «تعطيل الكل» writes. Whether there is any left today is the
+        // flavour's answer, and orderable() asks both.
+        $scoops = $this->addons->filter(fn ($addon) => $addon->isScoop() && $addon->available);
 
-        if ($scoops->isEmpty() || $scoops->every(fn ($addon) => ! $addon->available)) {
+        if ($scoops->isEmpty() || $scoops->every(fn ($addon) => ! $addon->orderable())) {
             return null;
         }
 
         $families = [];
 
         foreach (array_keys(Addon::SCOOP_FAMILIES) as $family) {
-            $inFamily = $scoops->where('scoop_family', $family)->values();
+            $inFamily = $scoops->filter(fn ($addon) => $addon->scoopFamily() === $family)->values();
 
             if ($inFamily->isEmpty()) {
                 continue;
@@ -82,9 +90,9 @@ class ProductResource extends JsonResource
 
             $families[$family] = $inFamily->map(fn ($addon) => [
                 'id'        => $addon->slug,
-                'label'     => $addon->label,
+                'label'     => $addon->scoopLabel(),
                 'price'     => (float) $addon->price,
-                'available' => (bool) $addon->available,
+                'available' => $addon->orderable(),
             ])->all();
         }
 
