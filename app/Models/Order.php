@@ -97,7 +97,7 @@ class Order extends Model
         'preparation_time', 'estimated_delivery_time', 'driver', 'driver_assigned_at',
         'scheduled_for', 'cancel_reason', 'cancelled_at', 'received_at', 'delivered_at', 'paid_at',
         'table_number', 'printed_at', 'print_count', 'print_error',
-        'paid_by', 'shift_id', 'refunded_amount', 'refunded_at', 'refund_method',
+        'paid_by', 'shift_id', 'refunded_amount', 'refunded_at', 'refund_method', 'refund_reason',
         'tendered_amount', 'change_credited', 'change_credited_at',
         'driver_id', 'payment_account_id',
     ];

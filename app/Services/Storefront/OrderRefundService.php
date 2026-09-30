@@ -28,9 +28,14 @@ class OrderRefundService
     /**
      * Refund the full total as store credit.
      *
+     * `$reason` is what the customer was told and what the books will be asked
+     * about in a month. It is written on the order because these two paths make
+     * no request row to carry it — a cash refund used to leave a date and an
+     * amount and nothing else.
+     *
      * @throws RuntimeException when the order cannot take a refund
      */
-    public function toWallet(Order $order): void
+    public function toWallet(Order $order, ?string $reason = null): void
     {
         $this->assertRefundable($order);
 
@@ -40,7 +45,7 @@ class OrderRefundService
             throw new RuntimeException('لا يمكن الاسترداد للمحفظة — الطلب بلا حساب زبون');
         }
 
-        DB::transaction(function () use ($order) {
+        DB::transaction(function () use ($order, $reason) {
             $this->wallet->credit(
                 $order->customer,
                 Money::toAgorot($order->total),
@@ -57,6 +62,7 @@ class OrderRefundService
                 // Named so the drawer reconciliation knows this money never
                 // left the till — it moved onto the customer's balance.
                 'refund_method'   => Order::REFUND_WALLET,
+                'refund_reason'   => $reason ?: $order->refund_reason,
             ]);
         });
     }
@@ -67,7 +73,7 @@ class OrderRefundService
      * Recorded separately from a wallet refund because the two do opposite
      * things to the till: this one empties it, the other does not touch it.
      */
-    public function inCash(Order $order): void
+    public function inCash(Order $order, ?string $reason = null): void
     {
         $this->assertRefundable($order);
 
@@ -76,6 +82,7 @@ class OrderRefundService
             'refunded_amount' => $order->total,
             'refunded_at'     => now(),
             'refund_method'   => Order::REFUND_CASH,
+            'refund_reason'   => $reason ?: $order->refund_reason,
         ]);
     }
 

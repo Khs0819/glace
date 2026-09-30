@@ -41,7 +41,8 @@ class ChangeRefundRequest extends Model
     protected $fillable = [
         'order_id', 'order_reference', 'kind', 'amount',
         'holder_name', 'holder_phone', 'refund_method',
-        'notes', 'transfer_receipt', 'status', 'created_by', 'reviewed_by', 'reviewed_at',
+        'notes', 'review_note', 'transfer_receipt', 'status',
+        'created_by', 'reviewed_by', 'reviewed_at',
     ];
 
     protected $casts = [
@@ -90,6 +91,17 @@ class ChangeRefundRequest extends Model
         return $this->kind === self::KIND_ORDER;
     }
 
+    /** Why it was refused — or, on a completed one, a note beside the slip. */
+    public function reject(string $reason, ?int $userId): void
+    {
+        $this->update([
+            'status'      => self::STATUS_REJECTED,
+            'review_note' => $reason,
+            'reviewed_by' => $userId,
+            'reviewed_at' => now(),
+        ]);
+    }
+
     /**
      * The transfer has been sent.
      *
@@ -98,12 +110,13 @@ class ChangeRefundRequest extends Model
      * is the moment the order becomes "مسترد", with the amount and the date
      * the reports read.
      */
-    public function complete(?string $receipt, ?int $userId): void
+    public function complete(?string $receipt, ?int $userId, ?string $note = null): void
     {
-        \Illuminate\Support\Facades\DB::transaction(function () use ($receipt, $userId) {
+        \Illuminate\Support\Facades\DB::transaction(function () use ($receipt, $userId, $note) {
             $this->update([
                 'status'           => self::STATUS_COMPLETED,
                 'transfer_receipt' => $receipt ?? $this->transfer_receipt,
+                'review_note'      => $note ?: $this->review_note,
                 'reviewed_by'      => $userId,
                 'reviewed_at'      => now(),
             ]);

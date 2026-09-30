@@ -65,9 +65,23 @@ class ChangeRefundRequestResource extends Resource
                 ->formatStateUsing(fn ($state) => ChangeRefundRequest::REFUND_METHODS[$state] ?? $state)
                 ->disabled(),
 
+            Forms\Components\TextInput::make('createdBy.name')
+                ->label('طلبه')
+                ->disabled(),
+
+            Forms\Components\TextInput::make('reviewedBy.name')
+                ->label('حوّله')
+                ->disabled(),
+
             Forms\Components\Textarea::make('notes')
-                ->label('ملاحظات')
+                ->label('سبب الاسترداد')
                 ->disabled()
+                ->columnSpanFull(),
+
+            Forms\Components\Textarea::make('review_note')
+                ->label('ملاحظة المراجعة / سبب الرفض')
+                ->disabled()
+                ->visible(fn (?ChangeRefundRequest $record) => filled($record?->review_note))
                 ->columnSpanFull(),
 
             Forms\Components\FileUpload::make('transfer_receipt')
@@ -101,7 +115,10 @@ class ChangeRefundRequestResource extends Resource
                     ->label('المبلغ')
                     ->money('ILS')
                     ->weight('bold')
-                    ->color('success'),
+                    ->color('success')
+                    // What the tab adds up to, under the column: how much is
+                    // owed today, or how much went back this month.
+                    ->summarize(Tables\Columns\Summarizers\Sum::make()->label('المجموع')->money('ILS')),
 
                 Tables\Columns\TextColumn::make('holder_name')
                     ->label('صاحب الحساب')
@@ -140,24 +157,41 @@ class ChangeRefundRequestResource extends Resource
                         default     => 'gray',
                     }),
 
-                Tables\Columns\TextColumn::make('createdBy.name')
-                    ->label('الكاشير')
-                    ->placeholder('—'),
-
-                Tables\Columns\TextColumn::make('created_at')
-                    ->label('الوقت')
-                    ->dateTime('H:i - d/m')
-                    ->sortable(),
-
+                // Why the money is going back. The first question asked of any
+                // row in this list, and it used to read "ملاحظات".
                 Tables\Columns\TextColumn::make('notes')
-                    ->label('ملاحظات')
-                    ->limit(30)
+                    ->label('سبب الاسترداد')
+                    ->wrap()
+                    ->limit(60)
+                    ->tooltip(fn (ChangeRefundRequest $record) => $record->notes)
                     ->placeholder('—'),
+
+                Tables\Columns\TextColumn::make('createdBy.name')
+                    ->label('طلبه')
+                    ->description(fn (ChangeRefundRequest $record) => $record->created_at?->format('H:i - d/m'))
+                    ->sortable(['created_at'])
+                    ->placeholder('—'),
+
+                // Who sent the transfer, and when. Without these the archive
+                // says a refund happened but not who is answerable for it.
+                Tables\Columns\TextColumn::make('reviewedBy.name')
+                    ->label('المحاسب')
+                    ->description(fn (ChangeRefundRequest $record) => $record->reviewed_at?->format('H:i - d/m'))
+                    ->sortable(['reviewed_at'])
+                    ->placeholder('—'),
+
+                Tables\Columns\TextColumn::make('review_note')
+                    ->label('سبب الرفض')
+                    ->wrap()
+                    ->limit(40)
+                    ->placeholder('—')
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\ImageColumn::make('transfer_receipt')
                     ->label('الإشعار')
                     ->disk('public')
-                    ->height(36),
+                    ->height(36)
+                    ->placeholder('—'),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
@@ -202,35 +236,37 @@ class ChangeRefundRequestResource extends Resource
                 Tables\Actions\Action::make('markRejected')
                     ->label('❌ رفض')
                     ->color('danger')
-                    ->requiresConfirmation()
                     ->modalHeading('رفض طلب الاسترداد')
+                    ->modalSubmitActionLabel('رفض')
                     ->visible(fn (ChangeRefundRequest $record) => $record->isPending())
-                    ->action(function (ChangeRefundRequest $record) {
-                        $record->update([
-                            'status'      => 'rejected',
-                            'reviewed_by' => auth()->id(),
-                            'reviewed_at' => now(),
-                        ]);
+                    // "مرفوض" on its own tells the customer who asks nothing,
+                    // and tells whoever reads the archive less than that.
+                    ->form([
+                        Forms\Components\Textarea::make('review_note')
+                            ->label('سبب الرفض')
+                            ->rows(2)
+                            ->required()
+                            ->maxLength(500)
+                            ->placeholder('مثال: الباقي سُلّم للزبون نقداً في المحل'),
+                    ])
+                    ->action(function (ChangeRefundRequest $record, array $data) {
+                        $record->reject($data['review_note'], auth()->id());
+
                         Notification::make()->title('تم رفض الطلب')->warning()->send();
                     }),
 
                 Tables\Actions\ViewAction::make()->label('عرض'),
             ])
-            ->bulkActions([
-                Tables\Actions\BulkAction::make('markAllCompleted')
-                    ->label('✅ تحويل الكل')
-                    ->color('success')
-                    ->requiresConfirmation()
-                    ->action(function ($records) {
-                        $done = $records
-                            ->filter(fn (ChangeRefundRequest $r) => $r->isPending())
-                            ->each(fn (ChangeRefundRequest $r) => $r->complete(null, auth()->id()));
-
-                        Notification::make()->title('تم تحويل ' . $done->count() . ' طلبات')->success()->send();
-                    }),
-            ])
+            /*
+             * No bulk "transfer them all".
+             *
+             * It closed every selected request with no slip at all, which is
+             * the one thing that makes "تم التحويل" mean anything — leaving a
+             * row that says money went back with nothing to show that it did.
+             * Each transfer is sent one at a time; it is closed one at a time.
+             */
             ->emptyStateHeading('لا توجد طلبات استرداد')
-            ->emptyStateDescription('ستظهر هنا طلبات الاسترداد عند إنشائها من شاشة الكاشير.');
+            ->emptyStateDescription('ستظهر هنا طلبات الاسترداد عند إنشائها من شاشة الكاشير أو من صفحة الطلبات.');
     }
 
     public static function getPages(): array

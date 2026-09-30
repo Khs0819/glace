@@ -186,22 +186,81 @@ it('does not offer a driver for a pickup order', function () {
         ->assertTableActionHidden('assignDriver', $order);
 });
 
+/** Paid for, and therefore actually refundable. */
+function paidOrder(array $attributes = []): Order
+{
+    return storefrontOrder(array_merge([
+        'payment_status' => Order::STATUS_PAID,
+        'paid_at'        => now(),
+    ], $attributes));
+}
+
 it('refunds to the wallet only when someone decides to', function () {
-    $order = storefrontOrder(['status' => Order::FULFILMENT_CANCELLED]);
+    $order = paidOrder(['status' => Order::FULFILMENT_CANCELLED]);
 
     // Cancelling did not refund; this action is the separate decision.
     expect((float) ($order->customer->wallet()->first()?->balance ?? 0))->toBe(0.0);
 
     Livewire::test(App\Filament\Resources\OrderResource\Pages\ListOrders::class)
-        ->callTableAction('refundToWallet', $order)
+        ->callTableAction('refund', $order, [
+            'method' => 'wallet',
+            'notes'  => 'الزبون ألغى الطلب قبل التحضير',
+        ])
         ->assertHasNoTableActionErrors();
 
     expect($order->customer->wallet->fresh()->balance)->toBe(30.0)
-        ->and($order->fresh()->status)->toBe(Order::FULFILMENT_REFUNDED);
+        ->and($order->fresh()->status)->toBe(Order::FULFILMENT_REFUNDED)
+        // Written on the order whichever way the money went, so a cash or
+        // wallet refund — which raises no request — still says why.
+        ->and($order->fresh()->refund_reason)->toBe('الزبون ألغى الطلب قبل التحضير');
+});
+
+it('will not refund an order nobody paid for', function () {
+    // Refunding an unpaid order credited the customer with money they had
+    // never handed over. The action is not offered, and the service refuses
+    // it if it is reached another way.
+    $order = storefrontOrder(['status' => Order::FULFILMENT_CANCELLED]);
+
+    Livewire::test(App\Filament\Resources\OrderResource\Pages\ListOrders::class)
+        ->assertTableActionHidden('refund', $order);
+
+    expect((float) ($order->customer->wallet()->first()?->balance ?? 0))->toBe(0.0);
+});
+
+it('will not refund without a reason', function () {
+    $order = paidOrder();
+
+    Livewire::test(App\Filament\Resources\OrderResource\Pages\ListOrders::class)
+        ->callTableAction('refund', $order, ['method' => 'cash'])
+        ->assertHasTableActionErrors(['notes']);
+
+    expect($order->fresh()->isRefunded())->toBeFalse();
+});
+
+it('sends a transfer refund to the refunds list rather than settling it here', function () {
+    $order = paidOrder(['payment_method' => 'jawwal-manual']);
+
+    Livewire::test(App\Filament\Resources\OrderResource\Pages\ListOrders::class)
+        ->callTableAction('refund', $order, [
+            'method'       => 'bop',
+            'holder_name'  => 'أحمد علي',
+            'holder_phone' => '0599123456',
+            'notes'        => 'الطلب وصل ناقصاً',
+        ])
+        ->assertHasNoTableActionErrors();
+
+    $request = App\Models\ChangeRefundRequest::sole();
+
+    expect($request->kind)->toBe(App\Models\ChangeRefundRequest::KIND_ORDER)
+        ->and($request->isPending())->toBeTrue()
+        ->and($request->notes)->toBe('الطلب وصل ناقصاً')
+        // Not "مسترد" yet: nobody has sent the money.
+        ->and($order->fresh()->status)->toBe(Order::FULFILMENT_CANCELLED)
+        ->and($order->fresh()->isRefunded())->toBeFalse();
 });
 
 it('does not offer a second refund once the money has actually gone back', function () {
-    $order = storefrontOrder([
+    $order = paidOrder([
         'status'          => Order::FULFILMENT_REFUNDED,
         'refunded_amount' => 30,
         'refunded_at'     => now(),
@@ -209,8 +268,7 @@ it('does not offer a second refund once the money has actually gone back', funct
     ]);
 
     Livewire::test(App\Filament\Resources\OrderResource\Pages\ListOrders::class)
-        ->assertTableActionHidden('refundToWallet', $order)
-        ->assertTableActionHidden('refundInCash', $order);
+        ->assertTableActionHidden('refund', $order);
 });
 
 it('still offers the refund on an order only labelled refunded', function () {
@@ -218,10 +276,31 @@ it('still offers the refund on an order only labelled refunded', function () {
     // rows reading "مسترد" that the books still counted as completed sales.
     // Offering the action is how one of those gets finished rather than
     // quietly staying broken.
-    $order = storefrontOrder(['status' => Order::FULFILMENT_REFUNDED]);
+    $order = paidOrder(['status' => Order::FULFILMENT_REFUNDED]);
 
     Livewire::test(App\Filament\Resources\OrderResource\Pages\ListOrders::class)
-        ->assertTableActionVisible('refundToWallet', $order);
+        ->assertTableActionVisible('refund', $order);
+});
+
+it('does not offer a refund while a transfer is already waiting to be sent', function () {
+    $order = paidOrder();
+
+    App\Models\ChangeRefundRequest::create([
+        'order_id'        => $order->getKey(),
+        'order_reference' => $order->reference,
+        'kind'            => App\Models\ChangeRefundRequest::KIND_ORDER,
+        'amount'          => 30,
+        'holder_name'     => 'أحمد',
+        'holder_phone'    => '0599123456',
+        'refund_method'   => 'bop',
+        'notes'           => 'الزبون ألغى',
+        'created_by'      => auth()->id(),
+    ]);
+
+    // Otherwise the same order is refunded twice while the first transfer is
+    // still in somebody's hands.
+    Livewire::test(App\Filament\Resources\OrderResource\Pages\ListOrders::class)
+        ->assertTableActionHidden('refund', $order);
 });
 
 // ─── content ────────────────────────────────────────────────────────────────

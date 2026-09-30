@@ -175,6 +175,12 @@ class OrderFulfilment
      * — the same list the change refunds go through — and the order reads
      * "مسترد" only once that request is marked done.
      *
+     * A reason is not optional. This is the one action at the counter that
+     * takes money out, and "why" is the first question asked of it afterwards —
+     * by the accountant reading the day, or by anyone reading the month. It is
+     * written on the order whichever way the money goes, so the answer is in
+     * the same place for all three.
+     *
      * @param  array{holder_name?: ?string, holder_phone?: ?string, notes?: ?string}  $details
      */
     public function refund(Order $order, string $method, array $details = [], ?int $userId = null): ?ChangeRefundRequest
@@ -191,19 +197,25 @@ class OrderFulfilment
             throw new RuntimeException('يوجد طلب استرداد لهذا الطلب بانتظار التحويل');
         }
 
-        return DB::transaction(function () use ($order, $method, $details, $userId) {
+        $reason = trim((string) ($details['notes'] ?? ''));
+
+        if ($reason === '') {
+            throw new RuntimeException('اكتب سبب الاسترداد');
+        }
+
+        return DB::transaction(function () use ($order, $method, $details, $reason, $userId) {
             // The order is no longer going anywhere, and a driver who never
             // took it out is not owed for it.
             DriverSettlement::where('order_id', $order->getKey())->whereNull('payout_id')->delete();
 
             if ($method === 'wallet') {
-                $this->refunds->toWallet($order);
+                $this->refunds->toWallet($order, $reason);
 
                 return null;
             }
 
             if ($method === 'cash') {
-                $this->refunds->inCash($order);
+                $this->refunds->inCash($order, $reason);
 
                 return null;
             }
@@ -213,8 +225,12 @@ class OrderFulfilment
             }
 
             $order->update([
-                'status'       => Order::FULFILMENT_CANCELLED,
-                'cancelled_at' => $order->cancelled_at ?? now(),
+                'status'        => Order::FULFILMENT_CANCELLED,
+                'cancelled_at'  => $order->cancelled_at ?? now(),
+                // On the order as well as on the request: the request is where
+                // the transfer is chased, the order is where the refund is read
+                // about a month later.
+                'refund_reason' => $reason,
             ]);
 
             return ChangeRefundRequest::create([
@@ -225,7 +241,7 @@ class OrderFulfilment
                 'holder_name'     => $details['holder_name'] ?: ($order->customer_name ?? ''),
                 'holder_phone'    => $details['holder_phone'] ?: ($order->customer_phone ?? ''),
                 'refund_method'   => $method,
-                'notes'           => $details['notes'] ?? null,
+                'notes'           => $reason,
                 'created_by'      => $userId,
             ]);
         });

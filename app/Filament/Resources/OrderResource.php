@@ -9,7 +9,6 @@ use App\Models\Order;
 use App\Services\Orders\OrderFulfilment;
 use App\Models\Payment;
 use App\Services\Checkout\Money;
-use App\Services\Storefront\OrderRefundService;
 use App\Services\Storefront\WalletService;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -467,50 +466,78 @@ class OrderResource extends Resource
                         Notification::make()->title('تم تعيين السائق: ' . $driver->name)->success()->send();
                     }),
 
-                // Money back onto the customer's wallet, deliberately manual:
-                // handoff 12 is explicit that a refund is a decision somebody
-                // makes after checking, not something cancellation triggers.
-                Tables\Actions\Action::make('refundToWallet')
-                    ->label('استرداد للمحفظة')
+                /*
+                 * Money back to the customer, deliberately manual: handoff 12
+                 * is explicit that a refund is a decision somebody makes after
+                 * checking, not something cancellation triggers.
+                 *
+                 * One button for all three ways, and the same one the cashier
+                 * screen has. There used to be two here — wallet and cash —
+                 * with no transfer at all, so an order paid by Jawwal Pay or a
+                 * bank transfer could not be given back from this page; and
+                 * neither asked why, which is the first thing anyone reading
+                 * the refund afterwards wants to know.
+                 */
+                Tables\Actions\Action::make('refund')
+                    ->label('استرداد المبلغ')
                     ->icon('heroicon-o-arrow-uturn-left')
                     ->color('warning')
-                    ->requiresConfirmation()
                     ->modalHeading('استرداد قيمة الطلب')
-                    ->modalDescription(fn (Order $record) => "سيُضاف {$record->total} ₪ إلى رصيد الزبون وتتحول حالة الطلب إلى «مسترد».")
-                    ->visible(fn (Order $record) => $record->refundable() && $record->customer_id !== null)
-                    ->action(function (Order $record) {
+                    ->modalDescription(fn (Order $record) => "الطلب {$record->reference} — المبلغ " . number_format($record->total, 2) . ' ₪')
+                    ->modalSubmitActionLabel('استرداد')
+                    ->visible(fn (Order $record) => $record->isPaid()
+                        && $record->refundable()
+                        && ! $record->hasPendingOrderRefund())
+                    ->form(fn (Order $record) => [
+                        Forms\Components\Select::make('method')
+                            ->label('طريقة الاسترداد')
+                            ->options(array_filter([
+                                'wallet' => $record->customer_id ? 'إلى محفظة الزبون (فوري)' : null,
+                                'cash'   => 'نقداً من الدرج (فوري)',
+                                'jawwal' => 'تحويل جوال باي',
+                                'bop'    => 'تحويل بنك فلسطين',
+                                'palpay' => 'تحويل بال باي',
+                            ]))
+                            ->required()
+                            ->live()
+                            ->native(false)
+                            ->helperText('التحويل لا يُنفَّذ هنا — يذهب إلى «طلبات الاسترداد» ويُغلق برفع الإشعار.'),
+
+                        Forms\Components\TextInput::make('holder_name')
+                            ->label('اسم صاحب الحساب')
+                            ->default($record->customer_name)
+                            ->required(fn (Forms\Get $get) => ! in_array($get('method'), ['wallet', 'cash', null], true))
+                            ->visible(fn (Forms\Get $get) => ! in_array($get('method'), ['wallet', 'cash', null], true)),
+
+                        Forms\Components\TextInput::make('holder_phone')
+                            ->label('رقم الحساب / المحفظة')
+                            ->default($record->customer_phone)
+                            ->required(fn (Forms\Get $get) => ! in_array($get('method'), ['wallet', 'cash', null], true))
+                            ->visible(fn (Forms\Get $get) => ! in_array($get('method'), ['wallet', 'cash', null], true)),
+
+                        Forms\Components\Textarea::make('notes')
+                            ->label('سبب الاسترداد')
+                            ->rows(2)
+                            ->required()
+                            ->maxLength(500)
+                            ->placeholder('مثال: الزبون ألغى الطلب قبل التحضير'),
+                    ])
+                    ->action(function (Order $record, array $data) {
                         try {
-                            app(OrderRefundService::class)->toWallet($record);
+                            $request = app(OrderFulfilment::class)->refund($record, $data['method'], $data, auth()->id());
                         } catch (RuntimeException $e) {
                             Notification::make()->title($e->getMessage())->danger()->send();
 
                             return;
                         }
 
-                        Notification::make()->title('تم الاسترداد إلى محفظة الزبون')->success()->send();
-                    }),
-
-                // The other half of the same decision. Kept apart from the
-                // wallet refund because the two do opposite things to the
-                // till, and the books have to be able to tell them apart.
-                Tables\Actions\Action::make('refundInCash')
-                    ->label('استرداد نقداً')
-                    ->icon('heroicon-o-banknotes')
-                    ->color('warning')
-                    ->requiresConfirmation()
-                    ->modalHeading('استرداد نقدي')
-                    ->modalDescription(fn (Order $record) => "سيُسجَّل خروج {$record->total} ₪ من الدرج وتتحول حالة الطلب إلى «مسترد».")
-                    ->visible(fn (Order $record) => $record->refundable())
-                    ->action(function (Order $record) {
-                        try {
-                            app(OrderRefundService::class)->inCash($record);
-                        } catch (RuntimeException $e) {
-                            Notification::make()->title($e->getMessage())->danger()->send();
-
-                            return;
-                        }
-
-                        Notification::make()->title('سُجّل الاسترداد النقدي')->success()->send();
+                        Notification::make()
+                            ->title($request
+                                ? 'أُضيف إلى «طلبات الاسترداد» — يُغلق بعد رفع إشعار التحويل'
+                                : 'تم الاسترداد — الطلب مسترد')
+                            ->success()
+                            ->persistent()
+                            ->send();
                     }),
 
                 Tables\Actions\Action::make('cancel')

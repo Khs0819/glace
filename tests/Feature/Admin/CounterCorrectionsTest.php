@@ -172,12 +172,27 @@ it('refunds a paid order to the wallet and closes it', function () {
     $order = ccDelivery(['payment_status' => Order::STATUS_PAID, 'paid_at' => now()]);
 
     Livewire::test(CashierBoard::class)
-        ->callAction('refundOrder', ['method' => 'wallet'], ['reference' => $order->reference])
+        ->callAction('refundOrder', [
+            'method' => 'wallet', 'notes' => 'ألغى الزبون قبل التحضير',
+        ], ['reference' => $order->reference])
         ->assertHasNoActionErrors();
 
     expect($order->fresh()->status)->toBe(Order::FULFILMENT_REFUNDED)
         ->and((float) $order->fresh()->refunded_amount)->toBe(46.0)
+        // A wallet refund raises no request, so the order is the only place
+        // the reason can live.
+        ->and($order->fresh()->refund_reason)->toBe('ألغى الزبون قبل التحضير')
         ->and(app(WalletService::class)->walletFor($order->customer)->fresh()->balance)->toBe(46.0);
+});
+
+it('will not refund without saying why', function () {
+    $order = ccDelivery(['payment_status' => Order::STATUS_PAID, 'paid_at' => now()]);
+
+    Livewire::test(CashierBoard::class)
+        ->callAction('refundOrder', ['method' => 'cash'], ['reference' => $order->reference])
+        ->assertHasActionErrors(['notes']);
+
+    expect($order->fresh()->isRefunded())->toBeFalse();
 });
 
 it('sends a transfer refund to the refunds list, and closes the order when it is sent', function () {
@@ -211,6 +226,7 @@ it('closes the order when the refund is marked sent from the refunds page too', 
 
     Livewire::test(CashierBoard::class)->callAction('refundOrder', [
         'method' => 'bop', 'holder_name' => 'أحمد', 'holder_phone' => '0599123456',
+        'notes'  => 'الطلب وصل ناقصاً',
     ], ['reference' => $order->reference]);
 
     Livewire::test(ChangeRefundRequestResource\Pages\ListChangeRefundRequests::class)
@@ -218,7 +234,83 @@ it('closes the order when the refund is marked sent from the refunds page too', 
             'transfer_receipt' => Illuminate\Http\UploadedFile::fake()->image('slip.png'),
         ]);
 
-    expect($order->fresh()->status)->toBe(Order::FULFILMENT_REFUNDED);
+    $request = ChangeRefundRequest::sole();
+
+    expect($order->fresh()->status)->toBe(Order::FULFILMENT_REFUNDED)
+        // The archive the accountant is answerable for: the slip, who sent it,
+        // and when.
+        ->and($request->transfer_receipt)->not->toBeNull()
+        ->and($request->reviewed_by)->toBe($this->cashier->id)
+        ->and($request->reviewed_at)->not->toBeNull();
+});
+
+it('will not close a transfer without the slip that proves it', function () {
+    fakePublicDisk();
+    $order = ccDelivery(['payment_status' => Order::STATUS_PAID, 'paid_at' => now()]);
+
+    Livewire::test(CashierBoard::class)->callAction('refundOrder', [
+        'method' => 'bop', 'holder_name' => 'أحمد', 'holder_phone' => '0599123456',
+        'notes'  => 'الطلب وصل ناقصاً',
+    ], ['reference' => $order->reference]);
+
+    // "تم التحويل" with nothing to show for it is only somebody's word, and
+    // the bulk action that allowed exactly that is gone.
+    Livewire::test(ChangeRefundRequestResource\Pages\ListChangeRefundRequests::class)
+        ->callTableAction('markCompleted', ChangeRefundRequest::sole(), [])
+        ->assertHasTableActionErrors(['transfer_receipt']);
+
+    expect($order->fresh()->isRefunded())->toBeFalse()
+        ->and(ChangeRefundRequest::sole()->isPending())->toBeTrue();
+});
+
+it('keeps why a refund was refused, not only that it was', function () {
+    $order = ccDelivery(['payment_status' => Order::STATUS_PAID, 'paid_at' => now()]);
+
+    Livewire::test(CashierBoard::class)->callAction('refundOrder', [
+        'method' => 'bop', 'holder_name' => 'أحمد', 'holder_phone' => '0599123456',
+        'notes'  => 'الطلب وصل ناقصاً',
+    ], ['reference' => $order->reference]);
+
+    Livewire::test(ChangeRefundRequestResource\Pages\ListChangeRefundRequests::class)
+        ->callTableAction('markRejected', ChangeRefundRequest::sole(), [
+            'review_note' => 'سُلّم المبلغ للزبون نقداً في المحل',
+        ]);
+
+    $request = ChangeRefundRequest::sole();
+
+    expect($request->status)->toBe(ChangeRefundRequest::STATUS_REJECTED)
+        ->and($request->review_note)->toBe('سُلّم المبلغ للزبون نقداً في المحل')
+        ->and($request->reviewed_by)->toBe($this->cashier->id);
+});
+
+it('keeps a sent refund in the archive rather than out of the way', function () {
+    fakePublicDisk();
+    $order = ccDelivery(['payment_status' => Order::STATUS_PAID, 'paid_at' => now()]);
+
+    Livewire::test(CashierBoard::class)->callAction('refundOrder', [
+        'method' => 'bop', 'holder_name' => 'أحمد', 'holder_phone' => '0599123456',
+        'notes'  => 'الطلب وصل ناقصاً',
+    ], ['reference' => $order->reference]);
+
+    $request = ChangeRefundRequest::sole();
+
+    $list = Livewire::test(ChangeRefundRequestResource\Pages\ListChangeRefundRequests::class);
+
+    // The work first: this is what the accountant owes somebody today.
+    $list->assertCanSeeTableRecords([$request]);
+
+    $list->callTableAction('markCompleted', $request, [
+        'transfer_receipt' => Illuminate\Http\UploadedFile::fake()->image('slip.png'),
+    ]);
+
+    // Off the day's list, and still there — a customer ringing next week about
+    // their money has to be answerable from this page.
+    Livewire::test(ChangeRefundRequestResource\Pages\ListChangeRefundRequests::class)
+        ->assertCanNotSeeTableRecords([$request->fresh()])
+        ->set('activeTab', 'completed')
+        ->assertCanSeeTableRecords([$request->fresh()])
+        ->set('activeTab', 'orders')
+        ->assertCanSeeTableRecords([$request->fresh()]);
 });
 
 it('will not refund an order nobody has paid for', function () {

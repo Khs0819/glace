@@ -1038,7 +1038,14 @@ class CashierBoard extends Page
                     ->required(fn (Forms\Get $get) => ! in_array($get('method'), ['wallet', 'cash', null], true))
                     ->visible(fn (Forms\Get $get) => ! in_array($get('method'), ['wallet', 'cash', null], true)),
 
-                Forms\Components\Textarea::make('notes')->label('سبب الاسترداد')->rows(2),
+                // Required: the refunds list, the order, and whoever reads the
+                // month all show this sentence and nothing else explains it.
+                Forms\Components\Textarea::make('notes')
+                    ->label('سبب الاسترداد')
+                    ->rows(2)
+                    ->required()
+                    ->maxLength(500)
+                    ->placeholder('مثال: الزبون ألغى الطلب قبل التحضير'),
             ])
             ->action(function (array $data, array $arguments) use ($order) {
                 $record = $order($arguments);
