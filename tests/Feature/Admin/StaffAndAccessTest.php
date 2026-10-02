@@ -192,6 +192,77 @@ it('will not let the counter hand out wallet credit by hand', function () {
         ->assertTableActionVisible('adjustWallet', $customer);
 });
 
+it('keeps customer balances off the counter\'s screen entirely', function () {
+    $customer = Customer::create(['name' => 'زبون', 'phone' => '0599000003']);
+    app(WalletService::class)->credit($customer, 7350, 'شحن');
+
+    $this->actingAs(User::factory()->accountant()->create());
+
+    // Not merely un-editable: the figure is not shown, because seeing it is
+    // the first step to being asked to change it.
+    Livewire::test(CustomerResource\Pages\ListCustomers::class)
+        ->assertCanSeeTableRecords([$customer])
+        ->assertDontSee('73.5');
+
+    $this->get(CustomerResource::getUrl('view', ['record' => $customer]))
+        ->assertSuccessful()
+        ->assertDontSee('73.5');
+
+    // The manager sees it in both places.
+    $this->actingAs(User::factory()->create());
+
+    Livewire::test(CustomerResource\Pages\ListCustomers::class)->assertSee('73.5');
+    $this->get(CustomerResource::getUrl('view', ['record' => $customer]))->assertSee('73.5');
+});
+
+it('lets the counter look a customer up but not rewrite one', function () {
+    $customer = Customer::create(['name' => 'زبون', 'phone' => '0599000003']);
+
+    $this->actingAs(User::factory()->accountant()->create());
+
+    // Finding somebody at the till is the whole of what the counter needs here.
+    expect(CustomerResource::canViewAny())->toBeTrue()
+        // The name and the phone are frozen onto every order they placed, and
+        // `blocked` decides whether they can order at all.
+        ->and(CustomerResource::canEdit($customer))->toBeFalse();
+
+    $this->get(CustomerResource::getUrl('view', ['record' => $customer]))->assertSuccessful();
+    $this->get(CustomerResource::getUrl('edit', ['record' => $customer]))->assertForbidden();
+
+    $this->actingAs(User::factory()->create());
+
+    expect(CustomerResource::canEdit($customer))->toBeTrue();
+});
+
+it('lets the counter stop and resume orders on the website', function () {
+    $this->actingAs(User::factory()->accountant()->create());
+
+    // Eight on a Friday, the kitchen is swamped: whoever is at the till makes
+    // this call, and it changes nothing that outlives the evening.
+    Livewire::test(App\Filament\Pages\StoreSettings::class)
+        ->call('forceClose', 'store')
+        ->assertHasNoErrors();
+
+    expect(app(App\Services\Storefront\StoreHours::class)->isStoreOpen())->toBeFalse();
+
+    Livewire::test(App\Filament\Pages\StoreSettings::class)->call('resumeSchedule', 'store');
+
+    expect(app(App\Services\Storefront\StoreHours::class)->status('store')['source'])->not->toBe('override');
+});
+
+it('still keeps the weekly schedule itself to the manager', function () {
+    $this->actingAs(User::factory()->accountant()->create());
+
+    // Flipping the sign on the door is one thing; rewriting when the shop
+    // opens all week is another.
+    Livewire::test(App\Filament\Pages\StoreSettings::class)
+        ->set('schedules.store.5', ['enabled' => true, 'open' => '01:00', 'close' => '02:00'])
+        ->call('saveSchedule', 'store');
+
+    expect(app(App\Services\Storefront\StoreHours::class)->schedule('store')[5]['open'] ?? null)
+        ->not->toBe('01:00');
+});
+
 it('leaves the settings page open so anyone can change their own password', function () {
     $this->actingAs(User::factory()->accountant()->create());
 

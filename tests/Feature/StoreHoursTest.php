@@ -229,17 +229,35 @@ it('lets a manager set the hours and close the shop from the dashboard', functio
         ->and(hours()->isStoreOpen())->toBeFalse();
 });
 
-it('does not let anyone but a manager change the hours or the state', function () {
+it('does not let anyone but a manager rewrite the weekly hours', function () {
     $this->actingAs(User::factory()->create(['role' => User::ROLE_ACCOUNTANT]));
 
     Livewire::test(StoreSettings::class)
         ->set('schedules.store', week('10:00', '11:00'))
         ->call('saveSchedule', 'store')
+        ->assertOk();
+
+    expect(hours()->schedule('store')[1]['close'])->toBe('00:00');
+});
+
+it('does let the counter stop and resume orders on the spot', function () {
+    // The two are different decisions. Rewriting when the shop opens all week
+    // outlives the evening; "we are swamped, stop taking orders" does not, and
+    // it is made at the till by whoever is standing there.
+    $this->actingAs(User::factory()->create(['role' => User::ROLE_ACCOUNTANT]));
+
+    Livewire::test(StoreSettings::class)
+        ->set('durations.store', 'manual')
         ->call('forceClose', 'store')
         ->assertOk();
 
-    expect(hours()->schedule('store')[1]['close'])->toBe('00:00')
-        ->and(hours()->isStoreOpen())->toBeTrue();
+    expect(hours()->isStoreOpen())->toBeFalse();
+
+    Livewire::test(StoreSettings::class)->call('resumeSchedule', 'store')->assertOk();
+
+    expect(hours()->isStoreOpen())->toBeTrue()
+        // Back on the schedule it never touched.
+        ->and(hours()->status('store')['source'])->not->toBe('override');
 });
 
 it('renders the settings page', function () {

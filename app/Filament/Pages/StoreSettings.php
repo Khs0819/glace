@@ -76,9 +76,24 @@ class StoreSettings extends Page implements HasForms
 
     // ── Read helpers for the view ────────────────────────────────────────
 
+    /** The weekly schedule, the closed messages, the auto-confirm window. */
     public function canManage(): bool
     {
         return Staff::isManager();
+    }
+
+    /**
+     * Flipping the sign on the door — and the counter does that.
+     *
+     * "Stop taking orders, we are swamped" is a decision made at the till at
+     * eight on a Friday, by whoever is standing there. It changes nothing that
+     * outlives the evening: the schedule underneath is untouched, and «العودة
+     * للجدول» puts it back. Writing that schedule is a different question, and
+     * it stays the manager's.
+     */
+    public function canSwitch(): bool
+    {
+        return Staff::current() !== null;
     }
 
     /**
@@ -150,7 +165,7 @@ class StoreSettings extends Page implements HasForms
 
     public function resumeSchedule(string $scope): void
     {
-        if (! $this->authorizeManager() || ! $this->validScope($scope)) {
+        if (! $this->canSwitch() || ! $this->validScope($scope)) {
             return;
         }
 
@@ -225,7 +240,7 @@ class StoreSettings extends Page implements HasForms
 
     private function force(string $scope, string $state): void
     {
-        if (! $this->authorizeManager() || ! $this->validScope($scope)) {
+        if (! $this->canSwitch() || ! $this->validScope($scope)) {
             return;
         }
 

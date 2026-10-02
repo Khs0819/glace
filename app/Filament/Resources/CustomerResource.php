@@ -47,6 +47,19 @@ class CustomerResource extends Resource
         return false;
     }
 
+    /**
+     * Looking a customer up is counter work; rewriting one is not.
+     *
+     * The name and the phone are frozen onto every order they ever placed, and
+     * `blocked` decides whether they can order at all. The counter reads this
+     * screen to find somebody — which it can, fully — and changing what is on
+     * it is the manager's.
+     */
+    public static function canEdit(Model $record): bool
+    {
+        return Staff::isManager();
+    }
+
     public static function canDelete(Model $record): bool
     {
         // Orders and wallet history hang off this row; deleting it would take
@@ -95,11 +108,18 @@ class CustomerResource extends Resource
                 Infolists\Components\IconEntry::make('blocked')->label('موقوف')->boolean(),
             ])->columns(3),
 
-            Infolists\Components\Section::make('المحفظة')->schema([
+            // Named for what it actually shows: without the balance it is a
+            // purchase history, and calling it "المحفظة" would promise a figure
+            // that is not there.
+            Infolists\Components\Section::make(fn () => Staff::isManager() ? 'المحفظة والطلبات' : 'الطلبات')->schema([
                 Infolists\Components\TextEntry::make('wallet.balance')
                     ->label('الرصيد')
                     ->suffix(' ₪')
                     ->placeholder('0.00')
+                    // A customer's balance is money the shop owes them. The
+                    // counter has no decision to make about it — and seeing it
+                    // is the first step to being asked to change it.
+                    ->visible(fn () => Staff::isManager())
                     ->weight(\Filament\Support\Enums\FontWeight::Bold)
                     ->size(Infolists\Components\TextEntry\TextEntrySize::Large),
 
@@ -128,7 +148,8 @@ class CustomerResource extends Resource
 
                 Tables\Columns\TextColumn::make('orders_count')->label('طلبات')->counts('orders')->badge()->color('gray'),
 
-                Tables\Columns\TextColumn::make('wallet.balance')->label('الرصيد')->suffix(' ₪')->placeholder('0.00'),
+                Tables\Columns\TextColumn::make('wallet.balance')->label('الرصيد')->suffix(' ₪')->placeholder('0.00')
+                    ->visible(fn () => Staff::isManager()),
 
                 Tables\Columns\TextColumn::make('created_at')->label('انضم')->date('d/m/Y')->sortable(),
 
@@ -141,6 +162,7 @@ class CustomerResource extends Resource
                 Tables\Filters\Filter::make('has_balance')
                     ->label('لديهم رصيد في المحفظة')
                     ->query(fn (Builder $query) => $query->whereHas('wallet', fn (Builder $wallet) => $wallet->where('balance', '>', 0)))
+                    ->visible(fn () => Staff::isManager())
                     ->toggle(),
 
                 Tables\Filters\TernaryFilter::make('blocked')->label('موقوف'),

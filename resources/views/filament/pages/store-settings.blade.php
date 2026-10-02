@@ -1,6 +1,7 @@
 <x-filament-panels::page>
     @php
         $canManage = $this->canManage();
+        $canSwitch = $this->canSwitch();
         $scopes = [
             'store'    => ['title' => '🏪 المتجر',  'hint' => 'متى يقبل المتجر الطلبات.'],
             'delivery' => ['title' => '🚗 التوصيل', 'hint' => 'متى تُقبل طلبات التوصيل. لا يعمل التوصيل والمتجر مغلق.'],
@@ -29,7 +30,7 @@
         <div class="text-sm text-gray-500 dark:text-gray-400">
             🕐 الوقت الآن: <span class="font-bold">{{ $this->nowLabel() }}</span>
             @unless ($canManage)
-                — <span class="text-amber-600 font-bold">تعديل المواعيد والحالة متاح للمدير فقط</span>
+                — <span class="text-amber-600 font-bold">الفتح والإغلاق الاستثنائي متاح لك؛ تعديل الجدول للمدير</span>
             @endunless
         </div>
 
@@ -52,24 +53,24 @@
 
                 {{-- Manual override --}}
                 <div class="flex items-center gap-2 flex-wrap mb-5">
-                    <select wire:model="durations.{{ $scope }}" class="hours-input" @disabled(! $canManage)>
+                    <select wire:model="durations.{{ $scope }}" class="hours-input" @disabled(! $canSwitch)>
                         @foreach (\App\Services\Storefront\StoreHours::DURATIONS as $value => $label)
                             <option value="{{ $value }}">{{ $label }}</option>
                         @endforeach
                     </select>
 
                     <button type="button" class="hours-btn" style="background:#16a34a"
-                            wire:click="forceOpen('{{ $scope }}')" @disabled(! $canManage)>
+                            wire:click="forceOpen('{{ $scope }}')" @disabled(! $canSwitch)>
                         🔓 فتح استثنائي
                     </button>
                     <button type="button" class="hours-btn" style="background:#dc2626"
-                            wire:click="forceClose('{{ $scope }}')" @disabled(! $canManage)>
+                            wire:click="forceClose('{{ $scope }}')" @disabled(! $canSwitch)>
                         🔒 إغلاق استثنائي
                     </button>
 
                     @if ($status['source'] === 'override')
                         <button type="button" class="hours-btn" style="background:#475569"
-                                wire:click="resumeSchedule('{{ $scope }}')" @disabled(! $canManage)>
+                                wire:click="resumeSchedule('{{ $scope }}')" @disabled(! $canSwitch)>
                             ↩️ العودة للجدول
                         </button>
                     @endif
