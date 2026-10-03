@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\FlavorResource\RelationManagers;
 
+use App\Filament\Concerns\ManagerEditsRelation;
 use App\Models\Product;
 use App\Support\FlavorFamily;
 use Filament\Resources\RelationManagers\RelationManager;
@@ -16,6 +17,8 @@ use Illuminate\Database\Eloquent\Builder;
  */
 class ProductsRelationManager extends RelationManager
 {
+    use ManagerEditsRelation;
+
     protected static string $relationship = 'products';
     protected static ?string $title = 'المنتجات التي تعرض هذه النكهة';
 

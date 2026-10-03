@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ProductResource\RelationManagers;
 
+use App\Filament\Concerns\ManagerEditsRelation;
 use App\Models\Addon;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -13,6 +14,8 @@ use Illuminate\Validation\Rules\Unique;
 
 class ProductAddonsRelationManager extends RelationManager
 {
+    use ManagerEditsRelation;
+
     protected static string $relationship = 'addons';
     protected static ?string $title = 'الإضافات الخاصة بالمنتج';
 

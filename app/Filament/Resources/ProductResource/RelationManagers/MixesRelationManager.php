@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ProductResource\RelationManagers;
 
+use App\Filament\Concerns\ManagerEditsRelation;
 use App\Models\Product;
 use App\Models\ProductMix;
 use Filament\Forms;
@@ -15,6 +16,8 @@ use Illuminate\Validation\Rules\Unique;
 
 class MixesRelationManager extends RelationManager
 {
+    use ManagerEditsRelation;
+
     protected static string $relationship = 'mixes';
     protected static ?string $title = 'قواعد المكس (Flat-List)';
 

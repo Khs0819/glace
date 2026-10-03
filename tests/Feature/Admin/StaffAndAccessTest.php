@@ -215,6 +215,84 @@ it('keeps customer balances off the counter\'s screen entirely', function () {
     $this->get(CustomerResource::getUrl('view', ['record' => $customer]))->assertSee('73.5');
 });
 
+it('lets the counter open a product to switch it off', function () {
+    $product = Tests\Support\CatalogFactory::flatList('waffle', ['name' => 'وافل']);
+
+    $this->actingAs(User::factory()->accountant()->create());
+
+    // The product that runs out mid-evening is reached through this page —
+    // the counter could not open it at all before.
+    expect(App\Filament\Resources\ProductResource::canEdit($product))->toBeTrue();
+
+    Livewire::test(App\Filament\Resources\ProductResource\Pages\EditProduct::class, ['record' => $product->getKey()])
+        ->fillForm(['available' => false])
+        ->call('save')
+        ->assertHasNoFormErrors();
+
+    expect($product->fresh()->available)->toBeFalse();
+});
+
+it('hands the counter a switch, not the price list', function () {
+    $product = Tests\Support\CatalogFactory::flatList('waffle', ['name' => 'وافل', 'slug' => 'waffle']);
+
+    $this->actingAs(User::factory()->accountant()->create());
+
+    // A locked field on screen only invites the question of how to unlock it,
+    // so the counter's form carries the switch alone.
+    Livewire::test(App\Filament\Resources\ProductResource\Pages\EditProduct::class, ['record' => $product->getKey()])
+        ->assertFormFieldExists('available')
+        ->assertFormFieldDoesNotExist('slug')
+        ->assertFormFieldDoesNotExist('category_id');
+
+    $this->actingAs(User::factory()->create());
+
+    Livewire::test(App\Filament\Resources\ProductResource\Pages\EditProduct::class, ['record' => $product->getKey()])
+        ->assertFormFieldExists('slug');
+});
+
+it('locks the tabs inside a product against the counter', function () {
+    $product = Tests\Support\CatalogFactory::flatList('waffle', ['name' => 'وافل']);
+    $item    = Tests\Support\CatalogFactory::item($product, 'nutella', ['label' => 'نوتيلا', 'price' => 20]);
+
+    $this->actingAs(User::factory()->accountant()->create());
+
+    // Opening the product page would have opened the price grid with it:
+    // a relation manager authorises itself, and with no policies registered
+    // it answers yes to everyone.
+    Livewire::test(App\Filament\Resources\ProductResource\RelationManagers\ItemsRelationManager::class, [
+        'ownerRecord' => $product,
+        'pageClass'   => App\Filament\Resources\ProductResource\Pages\EditProduct::class,
+    ])
+        ->assertCanSeeTableRecords([$item])
+        ->assertTableActionHidden('edit', $item)
+        ->assertTableActionHidden('delete', $item)
+        ->assertTableActionDoesNotExist('create');
+
+    $this->actingAs(User::factory()->create());
+
+    Livewire::test(App\Filament\Resources\ProductResource\RelationManagers\ItemsRelationManager::class, [
+        'ownerRecord' => $product,
+        'pageClass'   => App\Filament\Resources\ProductResource\Pages\EditProduct::class,
+    ])->assertTableActionVisible('edit', $item);
+});
+
+it('leaves the counter the availability toggle on an item that ran out', function () {
+    $product = Tests\Support\CatalogFactory::flatList('waffle', ['name' => 'وافل']);
+    $item    = Tests\Support\CatalogFactory::item($product, 'nutella', ['label' => 'نوتيلا', 'price' => 20]);
+
+    $this->actingAs(User::factory()->accountant()->create());
+
+    // The one edit the counter came to make. Filament does not route editable
+    // columns through the relation manager's authorization, which is what
+    // leaves this working while the form beside it is shut.
+    Livewire::test(App\Filament\Resources\ProductResource\RelationManagers\ItemsRelationManager::class, [
+        'ownerRecord' => $product,
+        'pageClass'   => App\Filament\Resources\ProductResource\Pages\EditProduct::class,
+    ])->call('updateTableColumnState', 'available', (string) $item->getKey(), false);
+
+    expect($item->fresh()->available)->toBeFalse();
+});
+
 it('lets the counter look a customer up but not rewrite one', function () {
     $customer = Customer::create(['name' => 'زبون', 'phone' => '0599000003']);
 

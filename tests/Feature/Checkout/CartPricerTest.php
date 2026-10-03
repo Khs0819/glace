@@ -57,7 +57,9 @@ it('prices a mix per chosen flavour, with premium replacing the standard price',
 
     // 7 standard + 11 premium — not basePrice(14) plus anything.
     expect($cart->total())->toBe(18.0)
-        ->and($cart->lines[0]->description)->toBe('مكس: نوتيلا + لوتس');
+        // Joined with a comma, not " + ": that separator divides one group of
+        // choices from the next, and the printed receipt breaks a line on it.
+        ->and($cart->lines[0]->description)->toBe('مكس: نوتيلا، لوتس');
 });
 
 it('charges basePrice exactly when every pick is a standard flavour', function () {

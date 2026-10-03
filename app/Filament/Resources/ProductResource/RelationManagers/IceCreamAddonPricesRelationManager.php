@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ProductResource\RelationManagers;
 
+use App\Filament\Concerns\ManagerEditsRelation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
@@ -12,6 +13,8 @@ use Illuminate\Validation\Rules\Unique;
 
 class IceCreamAddonPricesRelationManager extends RelationManager
 {
+    use ManagerEditsRelation;
+
     protected static string $relationship = 'iceCreamAddonPrices';
     protected static ?string $title = 'أسعار إضافة البوظة (براد مع بوظة)';
 

@@ -7,6 +7,7 @@ use App\Filament\Resources\ProductResource\Pages;
 use App\Filament\Resources\ProductResource\RelationManagers;
 use App\Models\MenuCategory;
 use App\Models\Product;
+use App\Support\Staff;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
@@ -14,6 +15,7 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class ProductResource extends Resource
 {
@@ -36,8 +38,32 @@ class ProductResource extends Resource
 
     public static function getNavigationBadgeColor(): ?string { return 'warning'; }
 
+    /**
+     * The counter opens a product — it could not before, and it has to.
+     *
+     * Switching the product off from the list is one thing; the one that runs
+     * out mid-evening is usually an *item* inside it — one flavour of waffle,
+     * one size — and those live on this page. So the page opens for everyone,
+     * and what the counter finds on it is a switch and nothing else: the form
+     * below hands the two roles different schemas, and the tabs beside it gate
+     * their own writes through ManagerEditsRelation.
+     */
+    public static function canEdit(Model $record): bool
+    {
+        return true;
+    }
+
     public static function form(Form $form): Form
     {
+        // Not the full form with its fields disabled: Filament resolves a
+        // disabled container before a field's own setting, so there is no
+        // re-enabling one toggle inside a locked form. A separate schema is
+        // also the plainer screen — the counter is handed the one control it
+        // came for instead of thirty greyed-out ones.
+        if (! Staff::isManager()) {
+            return $form->schema(static::counterSchema());
+        }
+
         return $form->schema([
             Forms\Components\Tabs::make('Product')
                 ->tabs([
@@ -257,6 +283,36 @@ class ProductResource extends Resource
      * method is silently ignored, which is why the أصناف / مكسات / أنواع / أحجام
      * panels never appeared on the edit screen (handoff tickets 01 · 05 · 07).
      */
+    /**
+     * What the counter sees when it opens a product.
+     *
+     * One switch, and the name of the thing it switches, so there is no
+     * guessing which product the page is on. Everything else — the price, the
+     * slug, the category, the flavour families — is the manager's, and showing
+     * it locked would only invite the question of how to unlock it.
+     *
+     * @return array<int, Forms\Components\Component>
+     */
+    private static function counterSchema(): array
+    {
+        return [
+            Forms\Components\Section::make('التوفر')
+                ->description('أوقف المنتج أو أعده. ولإيقاف صنف بعينه نفد — افتح تبويب «الأصناف» بالأسفل.')
+                ->schema([
+                    Forms\Components\Placeholder::make('product_name')
+                        ->label('المنتج')
+                        ->content(fn (?Product $record) => $record?->name ?? '—'),
+
+                    Forms\Components\Toggle::make('available')
+                        ->label('متوفر في القائمة')
+                        ->helperText('إذا أُوقف يظهر للعميل مع علامة «غير متوفر»')
+                        ->onColor('success')
+                        ->offColor('danger'),
+                ])
+                ->columns(2),
+        ];
+    }
+
     public static function getRelations(): array
     {
         return [

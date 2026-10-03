@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\OrderResource\RelationManagers;
 
+use App\Filament\Concerns\ManagerEditsRelation;
 use App\Models\Payment;
 use App\Services\Checkout\OrderPaymentService;
 use App\Services\JawwalPay\JawwalPayException;
@@ -22,6 +23,8 @@ use Filament\Tables\Table;
  */
 class PaymentsRelationManager extends RelationManager
 {
+    use ManagerEditsRelation;
+
     protected static string $relationship = 'payments';
     protected static ?string $title = 'محاولات الدفع';
 

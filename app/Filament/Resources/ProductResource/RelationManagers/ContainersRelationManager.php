@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ProductResource\RelationManagers;
 
+use App\Filament\Concerns\ManagerEditsRelation;
 use App\Models\ProductContainer;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -13,6 +14,8 @@ use Illuminate\Validation\Rules\Unique;
 
 class ContainersRelationManager extends RelationManager
 {
+    use ManagerEditsRelation;
+
     protected static string $relationship = 'containers';
     protected static ?string $title = 'الأنواع / الحاويات (Builder)';
 

@@ -217,8 +217,30 @@ class ReceiptDocument
             'total' => $item->line_total,
             // The resolved description carries size, flavours and extras, which
             // is exactly what whoever makes the order needs to read.
-            'notes' => array_values(array_filter(array_map('trim', explode('+', (string) $item->description)))),
+            'notes' => self::descriptionLines((string) $item->description),
         ])->all();
+    }
+
+    /**
+     * One line per group of choices, and the flavours of a mix are one group.
+     *
+     * A description is groups joined by " + ", and every group after the first
+     * names itself — "إضافات: …", "إضافات على الطلب: …". Splitting on the
+     * separator alone tore a mix in half, because its own flavours used to be
+     * joined the same way: «مكس (اختر طعمين): نوتيلا» printed with «كندر»
+     * stranded underneath it.
+     *
+     * Anchoring the split to the name of the group that follows fixes the
+     * orders already in the database too, whose description is stored text and
+     * does not change when the pricer does.
+     *
+     * @return array<int, string>
+     */
+    private static function descriptionLines(string $description): array
+    {
+        $parts = preg_split('/\s\+\s(?=إضافات)/u', $description) ?: [$description];
+
+        return array_values(array_filter(array_map('trim', $parts)));
     }
 
     /** @return array<string, float> label => amount, zero rows omitted */

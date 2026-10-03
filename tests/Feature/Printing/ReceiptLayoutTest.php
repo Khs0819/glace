@@ -134,3 +134,44 @@ it('spends no double-height lines on the paper', function () {
 
     expect($large)->toBe([]);
 });
+
+// ─── the choices on one line ────────────────────────────────────────────────
+
+it('keeps the flavours of a mix on one line', function () {
+    // The shop's own slip: «مكس (اختر طعمين): نوتيلا» printed with «كندر»
+    // stranded on the line below it. The mix joined its flavours with " + ",
+    // which is what separates one *group* of choices from the next, so the
+    // receipt read the two flavours as two groups.
+    $order = layoutOrder(items: [['وافل', 28.0, 1, 28.0]]);
+
+    $order->items()->first()->update(['description' => 'مكس (اختر طعمين): نوتيلا، كندر']);
+
+    expect(slip($order))->toContain('مكس (اختر طعمين): نوتيلا، كندر');
+});
+
+it('still gives the addons a line of their own', function () {
+    // The separator does have a job: the extras are a different thought from
+    // the flavours and belong under them, not run on behind them.
+    $order = layoutOrder(items: [['وافل', 28.0, 1, 28.0]]);
+
+    $order->items()->first()->update([
+        'description' => 'مكس (اختر طعمين): نوتيلا، كندر + إضافات: صوص نوتيلا',
+    ]);
+
+    $lines = array_column((new ReceiptDocument($order))->lines(42), 'text');
+    $notes = array_values(array_filter($lines, fn (string $l) => str_contains($l, 'نوتيلا')));
+
+    expect($notes)->toHaveCount(2)
+        ->and(trim($notes[0]))->toBe('مكس (اختر طعمين): نوتيلا، كندر')
+        ->and(trim($notes[1]))->toBe('إضافات: صوص نوتيلا');
+});
+
+it('reads an order placed before the separator was fixed', function () {
+    // Descriptions are stored text and do not change when the pricer does, so
+    // the orders already in the database still carry the old " + ".
+    $order = layoutOrder(items: [['وافل', 28.0, 1, 28.0]]);
+
+    $order->items()->first()->update(['description' => 'مكس (اختر طعمين): نوتيلا + كندر']);
+
+    expect(slip($order))->toContain('مكس (اختر طعمين): نوتيلا + كندر');
+});

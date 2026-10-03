@@ -260,7 +260,12 @@ class CartPricer
 
         return [
             ['type' => 'mix', 'mixId' => $mix->slug, 'mixLabel' => $mix->label, 'items' => $picked],
-            $mix->label . ': ' . implode(' + ', array_column($picked, 'label')),
+            // Joined the way every other list of choices on a line is joined.
+            // " + " is what separates one *group* from the next in a
+            // description — the flavours from the addons — so using it inside
+            // a group made the receipt read the mix as two separate things and
+            // print each on its own line.
+            $mix->label . ': ' . implode('، ', array_column($picked, 'label')),
             $total,
         ];
     }

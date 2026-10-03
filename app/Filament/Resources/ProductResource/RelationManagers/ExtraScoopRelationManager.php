@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ProductResource\RelationManagers;
 
+use App\Filament\Concerns\ManagerEditsRelation;
 use App\Filament\Resources\FlavorResource;
 use App\Models\Addon;
 use App\Models\Flavor;
@@ -36,6 +37,8 @@ use Illuminate\Validation\Rules\Unique;
  */
 class ExtraScoopRelationManager extends RelationManager
 {
+    use ManagerEditsRelation;
+
     protected static string $relationship = 'addons';
     protected static ?string $title = 'بوظة إضافية';
 

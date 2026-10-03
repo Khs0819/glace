@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\EventResource\RelationManagers;
 
+use App\Filament\Concerns\ManagerEditsRelation;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
@@ -10,6 +11,8 @@ use Filament\Tables\Table;
 
 class EventImagesRelationManager extends RelationManager
 {
+    use ManagerEditsRelation;
+
     protected static string $relationship = 'images';
     protected static ?string $title = 'معرض صور الفعالية';
 
